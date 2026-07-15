@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/date_utils.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../data/database/database_holder.dart';
 import 'app_providers.dart';
@@ -78,20 +79,28 @@ enum ReportPeriod { weekly, monthly, yearly }
 final reportPeriodProvider =
     StateProvider<ReportPeriod>((ref) => ReportPeriod.monthly);
 
+/// Anchor date for the selected report week, month, or year.
+final reportAnchorDateProvider =
+    StateProvider<DateTime>((ref) => DateTime.now());
+
 final reportDataProvider = FutureProvider.autoDispose<ReportData>((ref) async {
   ref.watch(databaseRefreshProvider);
   final period = ref.watch(reportPeriodProvider);
-  final now = DateTime.now();
+  final anchor = ref.watch(reportAnchorDateProvider);
   late DateTime start;
+  late DateTime end;
 
   switch (period) {
     case ReportPeriod.weekly:
-      start = DateTime(now.year, now.month, now.day - now.weekday + 1);
+      start = CashBookDateUtils.startOfWeek(anchor);
+      end = CashBookDateUtils.endOfWeek(anchor);
     case ReportPeriod.monthly:
-      start = DateTime(now.year, now.month, 1);
+      start = CashBookDateUtils.startOfMonth(anchor);
+      end = CashBookDateUtils.endOfMonth(anchor);
     case ReportPeriod.yearly:
-      start = DateTime(now.year, 1, 1);
+      start = CashBookDateUtils.startOfYear(anchor);
+      end = CashBookDateUtils.endOfYear(anchor);
   }
 
-  return ref.watch(reportRepositoryProvider).getReport(start: start, end: now);
+  return ref.watch(reportRepositoryProvider).getReport(start: start, end: end);
 });

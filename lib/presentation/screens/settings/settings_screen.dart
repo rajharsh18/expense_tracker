@@ -4,7 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/router/app_router.dart';
@@ -147,19 +148,58 @@ class SettingsScreen extends ConsumerWidget {
     );
 
     if (exportPath != null && context.mounted) {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(exportPath!)],
-          text: 'CashBook Backup',
-        ),
-      );
+      final savedPath = await _saveExportedBackup(exportPath!);
       await reopenDatabase(ref);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backup exported successfully')),
-        );
+        if (savedPath != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Backup saved to $savedPath')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Export cancelled')),
+          );
+        }
       }
     }
+  }
+
+  Future<String?> _saveExportedBackup(String exportPath) async {
+    final fileName = p.basename(exportPath);
+    final downloadsDir = await _resolveDownloadsDirectory();
+    final bytes = await File(exportPath).readAsBytes();
+
+    return FilePicker.platform.saveFile(
+      dialogTitle: 'Save Backup',
+      fileName: fileName,
+      initialDirectory: downloadsDir,
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+      bytes: bytes,
+    );
+  }
+
+  Future<String?> _resolveDownloadsDirectory() async {
+    try {
+      if (Platform.isAndroid) {
+        return (await getDownloadsDirectory())?.path;
+      }
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null) {
+          final downloads = p.join(userProfile, 'Downloads');
+          if (await Directory(downloads).exists()) return downloads;
+        }
+      }
+      if (Platform.isLinux || Platform.isMacOS) {
+        final home = Platform.environment['HOME'];
+        if (home != null) {
+          final downloads = p.join(home, 'Downloads');
+          if (await Directory(downloads).exists()) return downloads;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _importBackup(

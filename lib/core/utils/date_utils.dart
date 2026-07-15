@@ -76,14 +76,15 @@ class CashBookDateUtils {
   static DateTime endOfDay(DateTime date) =>
       DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
 
+  /// Week runs Sunday through Saturday.
   static DateTime startOfWeek(DateTime date) {
-    final weekday = date.weekday;
-    return startOfDay(date.subtract(Duration(days: weekday - 1)));
+    final daysFromSunday = date.weekday % 7;
+    return startOfDay(date.subtract(Duration(days: daysFromSunday)));
   }
 
+  /// Week runs Sunday through Saturday.
   static DateTime endOfWeek(DateTime date) {
-    final weekday = date.weekday;
-    return endOfDay(date.add(Duration(days: 7 - weekday)));
+    return endOfDay(startOfWeek(date).add(const Duration(days: 6)));
   }
 
   static DateTime startOfMonth(DateTime date) =>
