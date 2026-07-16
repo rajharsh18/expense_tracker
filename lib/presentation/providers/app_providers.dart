@@ -90,6 +90,50 @@ class BudgetLimitNotifier extends StateNotifier<int> {
   }
 }
 
+final budgetReminderProvider =
+    StateNotifierProvider<BoolSettingNotifier, bool>((ref) {
+  return BoolSettingNotifier(
+    ref.watch(settingsServiceProvider),
+    (s) => s.budgetReminder,
+    (s, v) => s.setBudgetReminder(v),
+  );
+});
+
+final dailyReminderProvider =
+    StateNotifierProvider<BoolSettingNotifier, bool>((ref) {
+  return BoolSettingNotifier(
+    ref.watch(settingsServiceProvider),
+    (s) => s.dailyReminder,
+    (s, v) => s.setDailyReminder(v),
+  );
+});
+
+final monthlyReminderProvider =
+    StateNotifierProvider<BoolSettingNotifier, bool>((ref) {
+  return BoolSettingNotifier(
+    ref.watch(settingsServiceProvider),
+    (s) => s.monthlyReminder,
+    (s, v) => s.setMonthlyReminder(v),
+  );
+});
+
+class BoolSettingNotifier extends StateNotifier<bool> {
+  BoolSettingNotifier(
+    this._settings,
+    bool Function(SettingsService) read,
+    Future<void> Function(SettingsService, bool) write,
+  ) : _write = write,
+      super(read(_settings));
+
+  final SettingsService _settings;
+  final Future<void> Function(SettingsService, bool) _write;
+
+  Future<void> set(bool value) async {
+    state = value;
+    await _write(_settings, value);
+  }
+}
+
 void refreshDatabase(WidgetRef ref) {
   ref.read(databaseRefreshProvider.notifier).state++;
 }

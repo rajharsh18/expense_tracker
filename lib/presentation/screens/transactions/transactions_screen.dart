@@ -17,6 +17,22 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   String _filter = 'all';
+  int? _accountFilter;
+  String? _categoryFilter;
+  String? _paymentModeFilter;
+
+  bool get _hasAnyFilter =>
+      _accountFilter != null ||
+      _categoryFilter != null ||
+      _paymentModeFilter != null;
+
+  void _clearAdvancedFilters() {
+    setState(() {
+      _accountFilter = null;
+      _categoryFilter = null;
+      _paymentModeFilter = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +43,13 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       appBar: AppBar(
         title: const Text('Transactions'),
         actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: _hasAnyFilter,
+              child: const Icon(Icons.filter_list),
+            ),
+            onPressed: () => _showFilters(context),
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => context.push('/search'),
@@ -44,6 +67,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   label: 'All',
                   selected: _filter == 'all',
                   onSelected: () => setState(() => _filter = 'all'),
+                ),
+                _FilterChip(
+                  label: 'Grains',
+                  selected: _filter == 'grains',
+                  onSelected: () => setState(() => _filter = 'grains'),
                 ),
                 _FilterChip(
                   label: 'Income',
@@ -68,13 +96,51 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               ],
             ),
           ),
+          if (_hasAnyFilter)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Filters active',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _clearAdvancedFilters,
+                    child: const Text('Clear all'),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: transactionsAsync.when(
               data: (transactions) {
                 final filtered = transactions.where((t) {
-                  if (_filter == 'all') return true;
-                  if (_filter == 'bookmarked') return t.isBookmark;
-                  return t.type == _filter;
+                  if (_filter == 'grains') {
+                    if (!t.isGrain) return false;
+                  } else if (_filter == 'all') {
+                    if (t.isGrain) return false;
+                  } else if (_filter == 'bookmarked') {
+                    if (!t.isBookmark || t.isGrain) return false;
+                  } else if (t.type != _filter || t.isGrain) {
+                    return false;
+                  }
+                  if (_accountFilter != null && t.accountId != _accountFilter) {
+                    return false;
+                  }
+                  if (_categoryFilter != null &&
+                      t.category.trim().toLowerCase() !=
+                          _categoryFilter!.trim().toLowerCase()) {
+                    return false;
+                  }
+                  if (_paymentModeFilter != null &&
+                      t.paymentMode.trim().toLowerCase() !=
+                          _paymentModeFilter!.trim().toLowerCase()) {
+                    return false;
+                  }
+                  return true;
                 }).toList();
 
                 if (filtered.isEmpty) {
@@ -120,6 +186,110 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showFilters(BuildContext context) async {
+    final accountsAsync = ref.read(accountsProvider);
+    final categoriesAsync = ref.read(categoriesProvider);
+    final payModesAsync = ref.read(paymentModesProvider);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Filter Transactions',
+                style: Theme.of(ctx).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              accountsAsync.when(
+                data: (accounts) => DropdownButtonFormField<int?>(
+                  initialValue: _accountFilter,
+                  decoration: const InputDecoration(labelText: 'Account'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('All')),
+                    ...accounts.map(
+                      (a) => DropdownMenuItem(
+                        value: a.id,
+                        child: Text(a.entryName),
+                      ),
+                    ),
+                  ],
+                  onChanged: (v) => setModalState(() => _accountFilter = v),
+                ),
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 12),
+              categoriesAsync.when(
+                data: (categories) {
+                  if (categories.isEmpty) return const SizedBox.shrink();
+                  return DropdownButtonFormField<String?>(
+                    initialValue: _categoryFilter,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('All')),
+                      ...categories.map(
+                        (c) => DropdownMenuItem(
+                          value: c.categoryName,
+                          child: Text(c.categoryName),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) => setModalState(() => _categoryFilter = v),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 12),
+              payModesAsync.when(
+                data: (modes) {
+                  if (modes.isEmpty) return const SizedBox.shrink();
+                  return DropdownButtonFormField<String?>(
+                    initialValue: _paymentModeFilter,
+                    decoration: const InputDecoration(labelText: 'Payment Mode'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('All')),
+                      ...modes.map(
+                        (m) => DropdownMenuItem(
+                          value: m.payModeName,
+                          child: Text(m.payModeName),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) =>
+                        setModalState(() => _paymentModeFilter = v),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {});
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Apply Filters'),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
       ),
     );
   }

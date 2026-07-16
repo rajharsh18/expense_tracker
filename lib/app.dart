@@ -15,7 +15,7 @@ class ExpenseTrackerApp extends ConsumerWidget {
     final currencySymbol = ref.watch(currencySymbolProvider);
 
     return MaterialApp.router(
-      title: 'CashBook Expense Tracker',
+      title: 'Apna CashBook Expense Tracker',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme(currencySymbol),
       darkTheme: AppTheme.darkTheme(currencySymbol),

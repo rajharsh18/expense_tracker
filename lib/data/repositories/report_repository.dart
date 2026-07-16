@@ -33,6 +33,12 @@ class ReportRepository {
     final accountMap = {for (final a in accounts) a.id!: a.entryName};
 
     for (final tx in transactions) {
+      if (tx.type == 'grain' ||
+          tx.type == 'grain_in' ||
+          tx.type == 'grain_out') {
+        continue;
+      }
+
       final txDate = CashBookDateUtils.parseDate(tx.date);
       if (txDate == null) continue;
       if (txDate.isBefore(start) || txDate.isAfter(end)) continue;
@@ -195,5 +201,75 @@ class ReportRepository {
           ),
         )
         .toList();
+  }
+
+  Future<GrainReportData> getGrainReport({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final transactions = await _db.select(_db.incomeTable).get();
+
+    var totalIn = 0;
+    var totalOut = 0;
+    final accountBreakdownIn = <String, int>{};
+    final accountBreakdownOut = <String, int>{};
+    final dailyMap = <String, GrainChartPoint>{};
+
+    final accounts = await _accountRepo.getAll();
+    final accountMap = {for (final a in accounts) a.id!: a.entryName};
+
+    for (final tx in transactions) {
+      final isIn = tx.type == 'grain_in' || tx.type == 'grain';
+      final isOut = tx.type == 'grain_out';
+      if (!isIn && !isOut) continue;
+
+      final txDate = CashBookDateUtils.parseDate(tx.date);
+      if (txDate == null) continue;
+      if (txDate.isBefore(start) || txDate.isAfter(end)) continue;
+
+      final accountName = accountMap[tx.accountId] ?? 'Unknown';
+      final dayKey = CashBookDateUtils.formatDate(txDate);
+
+      if (isIn) {
+        totalIn += tx.amount;
+        accountBreakdownIn[accountName] =
+            (accountBreakdownIn[accountName] ?? 0) + tx.amount;
+      } else {
+        totalOut += tx.amount;
+        accountBreakdownOut[accountName] =
+            (accountBreakdownOut[accountName] ?? 0) + tx.amount;
+      }
+
+      final existing = dailyMap[dayKey];
+      if (existing == null) {
+        dailyMap[dayKey] = GrainChartPoint(
+          label: dayKey,
+          grainIn: isIn ? tx.amount : 0,
+          grainOut: isOut ? tx.amount : 0,
+        );
+      } else {
+        dailyMap[dayKey] = GrainChartPoint(
+          label: dayKey,
+          grainIn: existing.grainIn + (isIn ? tx.amount : 0),
+          grainOut: existing.grainOut + (isOut ? tx.amount : 0),
+        );
+      }
+    }
+
+    final dailyPoints = dailyMap.values.toList()
+      ..sort((a, b) {
+        final da = CashBookDateUtils.parseDate(a.label);
+        final db = CashBookDateUtils.parseDate(b.label);
+        if (da == null || db == null) return 0;
+        return da.compareTo(db);
+      });
+
+    return GrainReportData(
+      totalIn: totalIn,
+      totalOut: totalOut,
+      accountBreakdownIn: accountBreakdownIn,
+      accountBreakdownOut: accountBreakdownOut,
+      dailyPoints: dailyPoints,
+    );
   }
 }

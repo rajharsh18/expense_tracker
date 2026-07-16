@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
+import '../../../core/utils/weight_formatter.dart';
+import '../../../domain/entities/transaction_entity.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/charts.dart';
@@ -16,7 +18,9 @@ class ReportsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportAsync = ref.watch(reportDataProvider);
+    final grainReportAsync = ref.watch(grainReportDataProvider);
     final period = ref.watch(reportPeriodProvider);
+    final reportMode = ref.watch(reportModeProvider);
     final theme = AppThemeExtension.of(context);
 
     return Scaffold(
@@ -49,138 +53,293 @@ class ReportsScreen extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _ReportPeriodSelector(period: period),
+            child: Column(
+              children: [
+                SegmentedButton<ReportMode>(
+                  segments: const [
+                    ButtonSegment(value: ReportMode.money, label: Text('Money')),
+                    ButtonSegment(value: ReportMode.grains, label: Text('Grains')),
+                  ],
+                  selected: {reportMode},
+                  onSelectionChanged: (s) =>
+                      ref.read(reportModeProvider.notifier).state = s.first,
+                ),
+                const SizedBox(height: 12),
+                _ReportPeriodSelector(period: period),
+              ],
+            ),
           ),
           Expanded(
-            child: reportAsync.when(
-              data: (report) => ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ReportStatCard(
-                          label: 'Income',
-                          amount: report.totalIncome,
-                          color: theme.incomeColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _ReportStatCard(
-                          label: 'Expense',
-                          amount: report.totalExpense,
-                          color: theme.expenseColor,
-                        ),
-                      ),
-                    ],
+            child: reportMode == ReportMode.money
+                ? reportAsync.when(
+                    data: (report) => _MoneyReportView(report: report, theme: theme),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                  )
+                : grainReportAsync.when(
+                    data: (report) => _GrainReportView(report: report, theme: theme),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
                   ),
-                  const SizedBox(height: 12),
-                  GlassCard(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _ReportStatCard(
-                          label: 'Net',
-                          amount: report.totalIncome - report.totalExpense,
-                          color: Theme.of(context).colorScheme.primary,
-                          compact: true,
-                        ),
-                        _ReportStatCard(
-                          label: 'Transfers',
-                          amount: report.totalTransfer,
-                          color: theme.transferColor,
-                          compact: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Income vs Expense',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  GlassCard(
-                    padding: const EdgeInsets.all(12),
-                    child: ExpenseLineChart(data: report.dailyPoints),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Category Breakdown',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  GlassCard(
-                    child: CategoryPieChart(data: report.categoryBreakdown),
-                  ),
-                  const SizedBox(height: 8),
-                  ...report.categoryBreakdown.entries.map(
-                    (e) => _BreakdownRow(
-                      label: e.key,
-                      amount: e.value,
-                      total: report.totalExpense,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Payment Mode Report',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  GlassCard(
-                    child: Column(
-                      children: report.paymentModeBreakdown.entries
-                          .map(
-                            (e) => _BreakdownRow(
-                              label: e.key,
-                              amount: e.value,
-                              total: report.totalExpense + report.totalIncome,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Account-wise Report',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  GlassCard(
-                    child: Column(
-                      children: report.accountBreakdown.entries
-                          .map(
-                            (e) => _BreakdownRow(
-                              label: e.key,
-                              amount: e.value,
-                              total: report.totalExpense + report.totalIncome,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 100),
-                ],
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
-            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MoneyReportView extends StatelessWidget {
+  const _MoneyReportView({required this.report, required this.theme});
+
+  final ReportData report;
+  final AppThemeExtension theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _ReportStatCard(
+                label: 'Income',
+                amount: report.totalIncome,
+                color: theme.incomeColor,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ReportStatCard(
+                label: 'Expense',
+                amount: report.totalExpense,
+                color: theme.expenseColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _ReportStatCard(
+                label: 'Net',
+                amount: report.totalIncome - report.totalExpense,
+                color: Theme.of(context).colorScheme.primary,
+                compact: true,
+              ),
+              _ReportStatCard(
+                label: 'Transfers',
+                amount: report.totalTransfer,
+                color: theme.transferColor,
+                compact: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Income vs Expense',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          padding: const EdgeInsets.all(12),
+          child: ExpenseLineChart(data: report.dailyPoints),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Category Breakdown',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: CategoryPieChart(data: report.categoryBreakdown),
+        ),
+        const SizedBox(height: 8),
+        ...report.categoryBreakdown.entries.map(
+          (e) => _BreakdownRow(
+            label: e.key,
+            amount: e.value,
+            total: report.totalExpense,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Payment Mode Report',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            children: report.paymentModeBreakdown.entries
+                .map(
+                  (e) => _BreakdownRow(
+                    label: e.key,
+                    amount: e.value,
+                    total: report.totalExpense + report.totalIncome,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Account-wise Report',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            children: report.accountBreakdown.entries
+                .map(
+                  (e) => _BreakdownRow(
+                    label: e.key,
+                    amount: e.value,
+                    total: report.totalExpense + report.totalIncome,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+}
+
+class _GrainReportView extends StatelessWidget {
+  const _GrainReportView({required this.report, required this.theme});
+
+  final GrainReportData report;
+  final AppThemeExtension theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final chartData = report.dailyPoints
+        .map(
+          (p) => ChartPoint(
+            label: p.label,
+            income: p.grainIn,
+            expense: p.grainOut,
+          ),
+        )
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _GrainStatCard(
+                label: 'IN',
+                grams: report.totalIn,
+                color: const Color(0xFF2E7D32),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _GrainStatCard(
+                label: 'OUT',
+                grams: report.totalOut,
+                color: const Color(0xFF8D6E63),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _GrainStatCard(
+                label: 'Net',
+                grams: report.totalIn - report.totalOut,
+                color: Theme.of(context).colorScheme.primary,
+                compact: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'IN vs OUT',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          padding: const EdgeInsets.all(12),
+          child: ExpenseLineChart(
+            data: chartData,
+            showIncome: true,
+            showExpense: true,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Account-wise IN',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            children: report.accountBreakdownIn.entries
+                .map(
+                  (e) => _GrainBreakdownRow(
+                    label: e.key,
+                    grams: e.value,
+                    total: report.totalIn,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Account-wise OUT',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            children: report.accountBreakdownOut.entries
+                .map(
+                  (e) => _GrainBreakdownRow(
+                    label: e.key,
+                    grams: e.value,
+                    total: report.totalOut,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 100),
+      ],
     );
   }
 }
@@ -548,6 +707,98 @@ class _ReportStatCard extends StatelessWidget {
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrainStatCard extends StatelessWidget {
+  const _GrainStatCard({
+    required this.label,
+    required this.grams,
+    required this.color,
+    this.compact = false,
+  });
+
+  final String label;
+  final int grams;
+  final Color color;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return Column(
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            WeightFormatter.format(grams),
+            style: TextStyle(fontWeight: FontWeight.w700, color: color),
+          ),
+        ],
+      );
+    }
+
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            WeightFormatter.format(grams),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrainBreakdownRow extends StatelessWidget {
+  const _GrainBreakdownRow({
+    required this.label,
+    required this.grams,
+    required this.total,
+  });
+
+  final String label;
+  final int grams;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = total > 0 ? grams / total : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label),
+              Text(
+                WeightFormatter.format(grams),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: fraction,
+              minHeight: 6,
             ),
           ),
         ],

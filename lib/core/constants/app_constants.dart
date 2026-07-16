@@ -32,7 +32,14 @@ class AppConstants {
     'Business',
   ];
 
-  static const List<String> transactionTypes = ['income', 'expense', 'transfer'];
+  static const List<String> transactionTypes = [
+    'income',
+    'expense',
+    'transfer',
+    'grain',
+    'grain_in',
+    'grain_out',
+  ];
 
   static const String roomIdentityHash =
       'c0a617c0bad5975bcc0201767eba7873';

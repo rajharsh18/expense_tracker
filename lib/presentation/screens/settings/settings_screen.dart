@@ -22,6 +22,10 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(darkModeProvider);
     final settings = ref.watch(settingsServiceProvider);
+    final budgetReminder = ref.watch(budgetReminderProvider);
+    final dailyReminder = ref.watch(dailyReminderProvider);
+    final monthlyReminder = ref.watch(monthlyReminderProvider);
+    final budgetLimit = ref.watch(budgetLimitProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -34,25 +38,13 @@ class SettingsScreen extends ConsumerWidget {
             value: isDark,
             onChanged: (v) => ref.read(darkModeProvider.notifier).set(v),
           ),
-          ListTile(
-            title: const Text('Currency'),
-            subtitle: Text('${settings.currency} (${settings.currencySymbol})'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showCurrencyPicker(context, ref),
-          ),
-          ListTile(
-            title: const Text('Language'),
-            subtitle: Text(settings.language.toUpperCase()),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showLanguagePicker(context, ref),
-          ),
           const Divider(),
           _SectionHeader(title: 'Budget'),
           ListTile(
             title: const Text('Monthly Budget'),
             subtitle: Text(
-              settings.budgetLimit > 0
-                  ? '${settings.currencySymbol}${(settings.budgetLimit / 100).toStringAsFixed(2)}'
+              budgetLimit > 0
+                  ? '${settings.currencySymbol}${(budgetLimit / 100).toStringAsFixed(2)}'
                   : 'Not set',
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -60,20 +52,22 @@ class SettingsScreen extends ConsumerWidget {
           ),
           SwitchListTile(
             title: const Text('Budget Reminder'),
-            value: settings.budgetReminder,
-            onChanged: (v) => settings.setBudgetReminder(v),
+            value: budgetReminder,
+            onChanged: (v) =>
+                ref.read(budgetReminderProvider.notifier).set(v),
           ),
           const Divider(),
           _SectionHeader(title: 'Reminders'),
           SwitchListTile(
             title: const Text('Daily Reminder'),
-            value: settings.dailyReminder,
-            onChanged: (v) => settings.setDailyReminder(v),
+            value: dailyReminder,
+            onChanged: (v) => ref.read(dailyReminderProvider.notifier).set(v),
           ),
           SwitchListTile(
             title: const Text('Monthly Reminder'),
-            value: settings.monthlyReminder,
-            onChanged: (v) => settings.setMonthlyReminder(v),
+            value: monthlyReminder,
+            onChanged: (v) =>
+                ref.read(monthlyReminderProvider.notifier).set(v),
           ),
           const Divider(),
           _SectionHeader(title: 'Backup & Restore'),
@@ -243,52 +237,6 @@ class SettingsScreen extends ConsumerWidget {
         );
       }
     }
-  }
-
-  Future<void> _showCurrencyPicker(BuildContext context, WidgetRef ref) async {
-    const currencies = {'INR': '₹', 'USD': '\$', 'EUR': '€', 'GBP': '£'};
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Select Currency'),
-        children: currencies.entries
-            .map(
-              (e) => SimpleDialogOption(
-                onPressed: () async {
-                  await ref
-                      .read(settingsServiceProvider)
-                      .setCurrency(e.key, e.value);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-                child: Text('${e.key} (${e.value})'),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-
-  Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
-    const languages = {'en': 'English', 'hi': 'Hindi'};
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Select Language'),
-        children: languages.entries
-            .map(
-              (e) => SimpleDialogOption(
-                onPressed: () async {
-                  await ref.read(settingsServiceProvider).setLanguage(e.key);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-                child: Text(e.value),
-              ),
-            )
-            .toList(),
-      ),
-    );
   }
 
   Future<void> _showBudgetDialog(BuildContext context, WidgetRef ref) async {

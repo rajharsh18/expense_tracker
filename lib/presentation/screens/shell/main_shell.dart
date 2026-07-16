@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
 
-/// Main scaffold with bottom navigation bar.
+/// Main scaffold with bottom navigation bar and center add action.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.child});
 
@@ -34,55 +34,134 @@ class _MainShellState extends State<MainShell> {
     _currentIndex = _routes.indexWhere((r) => location == r);
     if (_currentIndex < 0) _currentIndex = 0;
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: widget.child,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRouter.addTransaction),
-        icon: const Icon(Icons.add),
-        label: const Text('Add'),
-      ),
-      floatingActionButtonLocation: const _FabAboveNavBarLocation(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _onTap,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Home',
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Material(
+            elevation: 2,
+            shadowColor: Colors.black26,
+            borderRadius: BorderRadius.circular(20),
+            color: colorScheme.surfaceContainerHigh,
+            child: SizedBox(
+              height: 68,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.dashboard_outlined,
+                      selectedIcon: Icons.dashboard,
+                      label: 'Home',
+                      selected: _currentIndex == 0,
+                      onTap: () => _onTap(0),
+                    ),
+                  ),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.receipt_long_outlined,
+                      selectedIcon: Icons.receipt_long,
+                      label: 'Transactions',
+                      selected: _currentIndex == 1,
+                      onTap: () => _onTap(1),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 64,
+                    child: Center(
+                      child: Material(
+                        elevation: 4,
+                        shape: const CircleBorder(),
+                        color: colorScheme.primary,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => context.push(AppRouter.addTransaction),
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: Icon(
+                              Icons.add,
+                              color: colorScheme.onPrimary,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.bar_chart_outlined,
+                      selectedIcon: Icons.bar_chart,
+                      label: 'Reports',
+                      selected: _currentIndex == 2,
+                      onTap: () => _onTap(2),
+                    ),
+                  ),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.settings_outlined,
+                      selectedIcon: Icons.settings,
+                      label: 'Settings',
+                      selected: _currentIndex == 3,
+                      onTap: () => _onTap(3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Transactions',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Centers the FAB above the bottom navigation bar instead of docking
-/// into it (centerDocked is only meant for a notched BottomAppBar).
-class _FabAboveNavBarLocation extends FloatingActionButtonLocation {
-  const _FabAboveNavBarLocation();
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
-  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
-    final fabSize = scaffoldGeometry.floatingActionButtonSize;
-    final x = (scaffoldGeometry.scaffoldSize.width - fabSize.width) / 2.0;
-    const gap = 12.0;
-    final y = scaffoldGeometry.contentBottom - fabSize.height - gap;
-    return Offset(x, y);
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? selectedIcon : icon, color: color, size: 22),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

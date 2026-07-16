@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
+import '../../../core/utils/weight_formatter.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/glass_card.dart';
@@ -75,6 +76,11 @@ class TransactionDetailScreen extends ConsumerWidget {
               typeColor = theme.expenseColor;
             case 'transfer':
               typeColor = theme.transferColor;
+            case 'grain':
+            case 'grain_in':
+              typeColor = const Color(0xFF2E7D32);
+            case 'grain_out':
+              typeColor = const Color(0xFF8D6E63);
             default:
               typeColor = Theme.of(context).colorScheme.primary;
           }
@@ -94,10 +100,12 @@ class TransactionDetailScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     Text(
-                      AmountFormatter.formatSigned(
-                        tx.amount,
-                        isExpense: tx.isExpense,
-                      ),
+                      tx.isGrain
+                          ? '${tx.isGrainOut ? '-' : '+'}${WeightFormatter.format(tx.amount)}'
+                          : AmountFormatter.formatSigned(
+                              tx.amount,
+                              isExpense: tx.isExpense,
+                            ),
                       style: TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.w800,

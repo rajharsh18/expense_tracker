@@ -225,6 +225,8 @@ class BackupService {
         await _mergeDatabase(cashbookSrc, cashbookDest);
       }
 
+      await _deduplicateCategoriesAndPayModes(cashbookDest);
+
       final notebookSrc = p.join(tempDir.path, AppConstants.notebookDbName);
       final notebookDest = p.join(docsDir, AppConstants.notebookDbName);
       if (await File(notebookSrc).exists()) {
@@ -292,6 +294,15 @@ class BackupService {
       );
 
       try {
+        final destCategories = await destDb.select(destDb.categoryTable).get();
+        final existingCategoryNames = destCategories
+            .map((c) => c.categoryName.trim().toLowerCase())
+            .toSet();
+        final destPayModes = await destDb.select(destDb.payModeTable).get();
+        final existingPayModeNames = destPayModes
+            .map((m) => m.payModeName.trim().toLowerCase())
+            .toSet();
+
         for (final account in sourceAccounts) {
           await destDb.into(destDb.accountEntries).insert(
                 AccountEntriesCompanion.insert(
@@ -303,17 +314,21 @@ class BackupService {
         }
 
         for (final cat in sourceCategories) {
+          final nameKey = cat.categoryName.trim().toLowerCase();
+          if (existingCategoryNames.contains(nameKey)) continue;
           await destDb.into(destDb.categoryTable).insert(
                 CategoryTableCompanion.insert(categoryName: cat.categoryName),
-                mode: InsertMode.insertOrIgnore,
               );
+          existingCategoryNames.add(nameKey);
         }
 
         for (final mode in sourcePayModes) {
+          final nameKey = mode.payModeName.trim().toLowerCase();
+          if (existingPayModeNames.contains(nameKey)) continue;
           await destDb.into(destDb.payModeTable).insert(
                 PayModeTableCompanion.insert(payModeName: mode.payModeName),
-                mode: InsertMode.insertOrIgnore,
               );
+          existingPayModeNames.add(nameKey);
         }
 
         for (final reminder in sourceReminders) {
@@ -360,6 +375,50 @@ class BackupService {
       }
     } finally {
       await sourceDb.close();
+    }
+  }
+
+  Future<void> _deduplicateCategoriesAndPayModes(String dbPath) async {
+    final db = AppDatabase(
+      NativeDatabase(File(dbPath), logStatements: false),
+    );
+
+    try {
+      final categories = await db.select(db.categoryTable).get();
+      categories.sort((a, b) => a.id.compareTo(b.id));
+      final keptCategoryNames = <String, int>{};
+
+      for (final cat in categories) {
+        final nameKey = cat.categoryName.trim().toLowerCase();
+        final keptId = keptCategoryNames[nameKey];
+        if (keptId != null) {
+          await (db.update(db.incomeTable)
+                ..where((t) => t.categoryId.equals(cat.id)))
+              .write(IncomeTableCompanion(categoryId: Value(keptId)));
+          await (db.delete(db.categoryTable)
+                ..where((t) => t.id.equals(cat.id)))
+              .go();
+        } else {
+          keptCategoryNames[nameKey] = cat.id;
+        }
+      }
+
+      final payModes = await db.select(db.payModeTable).get();
+      payModes.sort((a, b) => a.id.compareTo(b.id));
+      final keptPayModeNames = <String>{};
+
+      for (final mode in payModes) {
+        final nameKey = mode.payModeName.trim().toLowerCase();
+        if (keptPayModeNames.contains(nameKey)) {
+          await (db.delete(db.payModeTable)
+                ..where((t) => t.id.equals(mode.id)))
+              .go();
+        } else {
+          keptPayModeNames.add(nameKey);
+        }
+      }
+    } finally {
+      await db.close();
     }
   }
 

@@ -1,12 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/amount_formatter.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/weight_formatter.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
@@ -40,18 +38,27 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   String? _selectedPaymentMode;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
-  final List<String> _imagePaths = [];
   bool _isBookmarked = false;
+  bool _isGrainMode = false;
+  String _grainDirection = 'in';
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _type = widget.transaction?.type ?? widget.initialType;
     final tx = widget.transaction;
+    _isGrainMode = tx?.isGrain ?? false;
+    _type = tx?.type ?? widget.initialType;
+    if (_isGrainMode) {
+      _grainDirection = tx?.isGrainOut == true ? 'out' : 'in';
+      _type = _grainDirection == 'out' ? 'grain_out' : 'grain_in';
+    }
+
     _amountController = TextEditingController(
       text: tx != null
-          ? AmountFormatter.toDisplayAmount(tx.amount).toString()
+          ? _isGrainMode
+              ? WeightFormatter.toDisplayKg(tx.amount).toString()
+              : AmountFormatter.toDisplayAmount(tx.amount).toString()
           : '',
     );
     _nameController = TextEditingController(text: tx?.name ?? '');
@@ -81,12 +88,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() => _imagePaths.add(image.path));
-    }
+  void _onGrainModeChanged(bool value) {
+    setState(() {
+      _isGrainMode = value;
+      if (value) {
+        _grainDirection = 'in';
+        _type = 'grain_in';
+      } else if (_type.startsWith('grain')) {
+        _type = 'expense';
+      }
+      _amountController.clear();
+    });
   }
 
   Future<void> _save() async {
@@ -102,6 +114,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
     try {
       final now = DateTime.now();
+      final parsedValue = double.parse(_amountController.text);
       final entity = TransactionEntity(
         id: widget.transaction?.id,
         accountId: _selectedAccountId!,
@@ -116,17 +129,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             _selectedTime.minute,
           ),
         ),
-        amount: AmountFormatter.toStorageAmount(
-          double.parse(_amountController.text),
-        ),
+        amount: _isGrainMode
+            ? WeightFormatter.toStorageGrams(parsedValue)
+            : AmountFormatter.toStorageAmount(parsedValue),
         name: _nameController.text,
         category: _selectedCategory ?? '',
         remark: _remarkController.text,
         paymentMode: _selectedPaymentMode ?? '',
         lastEditedDate: CashBookDateUtils.formatDate(now),
         lastEditedTime: CashBookDateUtils.formatTime(now),
-        imageUris: jsonEncode(_imagePaths),
-        type: _type,
+        imageUris: '[]',
+        type: _isGrainMode
+            ? (_grainDirection == 'out' ? 'grain_out' : 'grain_in')
+            : _type,
         isHeader: 0,
         isBookmarked: _isBookmarked ? 1 : 0,
         fromAccount: _type == 'transfer' ? _fromAccountController.text : null,
@@ -157,8 +172,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final accountsAsync = ref.watch(accountsProvider);
-    final categoriesAsync = ref.watch(categoriesProvider);
-    final payModesAsync = ref.watch(paymentModesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -178,163 +191,249 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'expense', label: Text('Expense')),
-                ButtonSegment(value: 'income', label: Text('Income')),
-                ButtonSegment(value: 'transfer', label: Text('Transfer')),
-              ],
-              selected: {_type},
-              onSelectionChanged: (s) => setState(() => _type = s.first),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Amount',
-                prefixText: '₹ ',
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Required';
-                if (double.tryParse(v) == null) return 'Invalid amount';
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            accountsAsync.when(
-              data: (accounts) => DropdownButtonFormField<int>(
-                initialValue: _selectedAccountId,
-                decoration: const InputDecoration(labelText: 'Account'),
-                items: accounts
-                    .map(
-                      (a) => DropdownMenuItem(
-                        value: a.id,
-                        child: Text(a.entryName),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedAccountId = v),
-              ),
-              loading: () => const LinearProgressIndicator(),
-              error: (_, _) => const Text('Failed to load accounts'),
-            ),
-            const SizedBox(height: 16),
-            categoriesAsync.when(
-              data: (categories) => DropdownButtonFormField<String>(
-                initialValue: _selectedCategory,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: categories
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c.categoryName,
-                        child: Text(c.categoryName),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedCategory = v),
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 16),
-            payModesAsync.when(
-              data: (modes) => DropdownButtonFormField<String>(
-                initialValue: _selectedPaymentMode,
-                decoration: const InputDecoration(labelText: 'Payment Mode'),
-                items: modes
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m.payModeName,
-                        child: Text(m.payModeName),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedPaymentMode = v),
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Name / Title'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _remarkController,
-              decoration: const InputDecoration(labelText: 'Remark'),
-              maxLines: 2,
-            ),
-            if (_type == 'transfer') ...[
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _fromAccountController,
-                decoration: const InputDecoration(labelText: 'From Account'),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _toAccountController,
-                decoration: const InputDecoration(labelText: 'To Account'),
-              ),
-            ],
-            const SizedBox(height: 16),
-            ListTile(
-              title: const Text('Date'),
-              subtitle: Text(CashBookDateUtils.formatDate(_selectedDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (date != null) setState(() => _selectedDate = date);
-              },
-            ),
-            ListTile(
-              title: const Text('Time'),
-              subtitle: Text(_selectedTime.format(context)),
-              trailing: const Icon(Icons.access_time),
-              onTap: () async {
-                final time = await showTimePicker(
-                  context: context,
-                  initialTime: _selectedTime,
-                );
-                if (time != null) setState(() => _selectedTime = time);
-              },
-            ),
-            SwitchListTile(
-              title: const Text('Bookmark'),
-              value: _isBookmarked,
-              onChanged: (v) => setState(() => _isBookmarked = v),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final path in _imagePaths)
-                  Chip(
-                    label: Text(path.split('/').last),
-                    onDeleted: () => setState(() => _imagePaths.remove(path)),
+      body: Column(
+        children: [
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  SwitchListTile(
+                    title: const Text('Record in kg (Grains)'),
+                    subtitle: const Text(
+                      'Track weight in kilograms instead of amount',
+                    ),
+                    value: _isGrainMode,
+                    onChanged: _onGrainModeChanged,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                ActionChip(
-                  avatar: const Icon(Icons.add_a_photo, size: 18),
-                  label: const Text('Add Image'),
-                  onPressed: _pickImage,
-                ),
-              ],
+                  if (_isGrainMode) ...[
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'in', label: Text('IN')),
+                        ButtonSegment(value: 'out', label: Text('OUT')),
+                      ],
+                      selected: {_grainDirection},
+                      onSelectionChanged: (s) => setState(() {
+                        _grainDirection = s.first;
+                        _type = _grainDirection == 'out'
+                            ? 'grain_out'
+                            : 'grain_in';
+                      }),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'expense', label: Text('Expense')),
+                        ButtonSegment(value: 'income', label: Text('Income')),
+                        ButtonSegment(
+                          value: 'transfer',
+                          label: Text('Transfer'),
+                        ),
+                      ],
+                      selected: {_type},
+                      onSelectionChanged: (s) =>
+                          setState(() => _type = s.first),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      label: _RequiredLabel(
+                        text: _isGrainMode ? 'Weight (kg)' : 'Amount',
+                      ),
+                      prefixText: _isGrainMode ? null : '₹ ',
+                      suffixText: _isGrainMode ? 'kg' : null,
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      final parsed = double.tryParse(v);
+                      if (parsed == null) {
+                        return _isGrainMode ? 'Invalid weight' : 'Invalid amount';
+                      }
+                      if (_isGrainMode && parsed <= 0) {
+                        return 'Weight must be greater than 0';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  accountsAsync.when(
+                    data: (accounts) => DropdownButtonFormField<int>(
+                      initialValue: _selectedAccountId,
+                      decoration: const InputDecoration(
+                        label: _RequiredLabel(text: 'Account'),
+                      ),
+                      items: accounts
+                          .map(
+                            (a) => DropdownMenuItem(
+                              value: a.id,
+                              child: Text(a.entryName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedAccountId = v),
+                      validator: (v) => v == null ? 'Required' : null,
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, _) => const Text('Failed to load accounts'),
+                  ),
+                  if (!_isGrainMode) ...[
+                    const SizedBox(height: 16),
+                    ref.watch(categoriesProvider).when(
+                      data: (categories) => DropdownButtonFormField<String>(
+                        initialValue: _selectedCategory,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
+                        items: categories
+                            .map(
+                              (c) => DropdownMenuItem(
+                                value: c.categoryName,
+                                child: Text(c.categoryName),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _selectedCategory = v),
+                      ),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 16),
+                    ref.watch(paymentModesProvider).when(
+                      data: (modes) => DropdownButtonFormField<String>(
+                        initialValue: _selectedPaymentMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Mode',
+                        ),
+                        items: modes
+                            .map(
+                              (m) => DropdownMenuItem(
+                                value: m.payModeName,
+                                child: Text(m.payModeName),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _selectedPaymentMode = v),
+                      ),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Name / Title'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _remarkController,
+                    decoration: const InputDecoration(labelText: 'Remark'),
+                    maxLines: 2,
+                  ),
+                  if (_type == 'transfer' && !_isGrainMode) ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _fromAccountController,
+                      decoration: const InputDecoration(
+                        labelText: 'From Account',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _toAccountController,
+                      decoration: const InputDecoration(labelText: 'To Account'),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: const Text('Date'),
+                    subtitle: Text(CashBookDateUtils.formatDate(_selectedDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (date != null) setState(() => _selectedDate = date);
+                    },
+                  ),
+                  ListTile(
+                    title: const Text('Time'),
+                    subtitle: Text(_selectedTime.format(context)),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: _selectedTime,
+                      );
+                      if (time != null) setState(() => _selectedTime = time);
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('Bookmark'),
+                    value: _isBookmarked,
+                    onChanged: (v) => setState(() => _isBookmarked = v),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isSaving ? null : _save,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Done'),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequiredLabel extends StatelessWidget {
+  const _RequiredLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        text: text,
+        children: const [
+          TextSpan(
+            text: ' *',
+            style: TextStyle(color: Colors.red),
+          ),
+        ],
       ),
     );
   }

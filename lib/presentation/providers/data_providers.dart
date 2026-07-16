@@ -76,6 +76,11 @@ final searchResultsProvider =
 
 enum ReportPeriod { weekly, monthly, yearly }
 
+enum ReportMode { money, grains }
+
+final reportModeProvider =
+    StateProvider<ReportMode>((ref) => ReportMode.money);
+
 final reportPeriodProvider =
     StateProvider<ReportPeriod>((ref) => ReportPeriod.monthly);
 
@@ -103,4 +108,30 @@ final reportDataProvider = FutureProvider.autoDispose<ReportData>((ref) async {
   }
 
   return ref.watch(reportRepositoryProvider).getReport(start: start, end: end);
+});
+
+final grainReportDataProvider =
+    FutureProvider.autoDispose<GrainReportData>((ref) async {
+  ref.watch(databaseRefreshProvider);
+  final period = ref.watch(reportPeriodProvider);
+  final anchor = ref.watch(reportAnchorDateProvider);
+  late DateTime start;
+  late DateTime end;
+
+  switch (period) {
+    case ReportPeriod.weekly:
+      start = CashBookDateUtils.startOfWeek(anchor);
+      end = CashBookDateUtils.endOfWeek(anchor);
+    case ReportPeriod.monthly:
+      start = CashBookDateUtils.startOfMonth(anchor);
+      end = CashBookDateUtils.endOfMonth(anchor);
+    case ReportPeriod.yearly:
+      start = CashBookDateUtils.startOfYear(anchor);
+      end = CashBookDateUtils.endOfYear(anchor);
+  }
+
+  return ref.watch(reportRepositoryProvider).getGrainReport(
+        start: start,
+        end: end,
+      );
 });

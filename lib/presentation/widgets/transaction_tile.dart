@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/amount_formatter.dart';
+import '../../core/utils/weight_formatter.dart';
 import '../../domain/entities/transaction_entity.dart';
 
 /// List tile for displaying a transaction.
@@ -29,13 +30,20 @@ class TransactionTile extends StatelessWidget {
     switch (transaction.type) {
       case 'income':
         typeColor = theme.incomeColor;
-        typeIcon = Icons.arrow_downward_rounded;
+        typeIcon = Icons.arrow_upward_rounded;
       case 'expense':
         typeColor = theme.expenseColor;
-        typeIcon = Icons.arrow_upward_rounded;
+        typeIcon = Icons.arrow_downward_rounded;
       case 'transfer':
         typeColor = theme.transferColor;
         typeIcon = Icons.swap_horiz_rounded;
+      case 'grain':
+      case 'grain_in':
+        typeColor = const Color(0xFF2E7D32);
+        typeIcon = Icons.arrow_downward_rounded;
+      case 'grain_out':
+        typeColor = const Color(0xFF8D6E63);
+        typeIcon = Icons.arrow_upward_rounded;
       default:
         typeColor = colorScheme.primary;
         typeIcon = Icons.receipt;
@@ -73,10 +81,12 @@ class TransactionTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            AmountFormatter.formatSigned(
-              transaction.amount,
-              isExpense: transaction.isExpense,
-            ),
+            transaction.isGrain
+                ? '${transaction.isGrainOut ? '-' : '+'}${WeightFormatter.format(transaction.amount)}'
+                : AmountFormatter.formatSigned(
+                    transaction.amount,
+                    isExpense: transaction.isExpense,
+                  ),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: typeColor,

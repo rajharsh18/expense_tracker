@@ -32,6 +32,10 @@ abstract class TransactionEntity with _$TransactionEntity {
   bool get isIncome => type == 'income';
   bool get isExpense => type == 'expense';
   bool get isTransfer => type == 'transfer';
+  bool get isGrain =>
+      type == 'grain' || type == 'grain_in' || type == 'grain_out';
+  bool get isGrainIn => type == 'grain_in' || type == 'grain';
+  bool get isGrainOut => type == 'grain_out';
   bool get isBookmark => isBookmarked == 1;
   bool get hasImages => imageUris != '[]' && imageUris.isNotEmpty;
 }
@@ -123,4 +127,33 @@ abstract class SearchFilter with _$SearchFilter {
     int? minAmount,
     int? maxAmount,
   }) = _SearchFilter;
+}
+
+/// Grain analytics for the reports screen.
+class GrainReportData {
+  const GrainReportData({
+    required this.totalIn,
+    required this.totalOut,
+    required this.accountBreakdownIn,
+    required this.accountBreakdownOut,
+    required this.dailyPoints,
+  });
+
+  final int totalIn;
+  final int totalOut;
+  final Map<String, int> accountBreakdownIn;
+  final Map<String, int> accountBreakdownOut;
+  final List<GrainChartPoint> dailyPoints;
+}
+
+class GrainChartPoint {
+  const GrainChartPoint({
+    required this.label,
+    required this.grainIn,
+    required this.grainOut,
+  });
+
+  final String label;
+  final int grainIn;
+  final int grainOut;
 }

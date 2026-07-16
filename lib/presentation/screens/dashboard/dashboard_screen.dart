@@ -6,21 +6,16 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
 import '../../providers/data_providers.dart';
-import '../../widgets/charts.dart';
 import '../../widgets/glass_card.dart';
-import '../../widgets/transaction_tile.dart';
 
-/// Main dashboard screen with balance, charts, and recent transactions.
+/// Main dashboard screen with balance and summary.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(dashboardSummaryProvider);
-    final recentAsync = ref.watch(recentTransactionsProvider);
     final remindersAsync = ref.watch(remindersProvider);
-    final chartAsync = ref.watch(weeklyChartProvider);
-    final accountsAsync = ref.watch(accountsProvider);
     final theme = AppThemeExtension.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -29,8 +24,7 @@ class DashboardScreen extends ConsumerWidget {
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(dashboardSummaryProvider);
-            ref.invalidate(recentTransactionsProvider);
-            ref.invalidate(weeklyChartProvider);
+            ref.invalidate(remindersProvider);
           },
           child: CustomScrollView(
             slivers: [
@@ -48,6 +42,40 @@ class DashboardScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
+                    remindersAsync.when(
+                      data: (reminders) {
+                        if (reminders.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Notifications',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            GlassCard(
+                              child: Column(
+                                children: [
+                                  for (final r in reminders)
+                                    ListTile(
+                                      leading: const Icon(Icons.notifications),
+                                      title: Text(r.name),
+                                      subtitle: Text('${r.date} at ${r.time}'),
+                                      dense: true,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        );
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
                     summaryAsync.when(
                       data: (summary) => _BalanceCard(summary: summary),
                       loading: () => const _LoadingCard(height: 140),
@@ -62,7 +90,7 @@ class DashboardScreen extends ConsumerWidget {
                               label: "Today's Income",
                               amount: summary.todayIncome,
                               color: theme.incomeColor,
-                              icon: Icons.trending_up,
+                              icon: Icons.trending_down,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -71,7 +99,7 @@ class DashboardScreen extends ConsumerWidget {
                               label: "Today's Expense",
                               amount: summary.todayExpense,
                               color: theme.expenseColor,
-                              icon: Icons.trending_down,
+                              icon: Icons.trending_up,
                             ),
                           ),
                         ],
@@ -129,109 +157,6 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     const SizedBox(height: 16),
                     _QuickActions(),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Expense Trend',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GlassCard(
-                      padding: const EdgeInsets.all(12),
-                      child: chartAsync.when(
-                        data: (data) => ExpenseLineChart(
-                          data: data,
-                          showIncome: true,
-                          showExpense: true,
-                        ),
-                        loading: () => const _LoadingCard(height: 200),
-                        error: (_, _) => const ExpenseLineChart(data: []),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Recent Transactions',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        TextButton(
-                          onPressed: () => context.go(AppRouter.transactions),
-                          child: const Text('See all'),
-                        ),
-                      ],
-                    ),
-                    recentAsync.when(
-                      data: (transactions) {
-                        if (transactions.isEmpty) {
-                          return const _EmptyState(
-                            icon: Icons.receipt_long,
-                            message: 'No transactions yet',
-                          );
-                        }
-                        final accountMap =
-                            accountsAsync.valueOrNull?.fold<Map<int, String>>(
-                              {},
-                              (map, a) {
-                                map[a.id!] = a.entryName;
-                                return map;
-                              },
-                            ) ??
-                            {};
-                        return GlassCard(
-                          padding: EdgeInsets.zero,
-                          child: Column(
-                            children: [
-                              for (final tx in transactions)
-                                TransactionTile(
-                                  transaction: tx,
-                                  accountName: accountMap[tx.accountId],
-                                  onTap: () =>
-                                      context.push('/transactions/${tx.id}'),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      loading: () => const _LoadingCard(height: 200),
-                      error: (e, _) => Text('Error: $e'),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Upcoming Reminders',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    remindersAsync.when(
-                      data: (reminders) {
-                        if (reminders.isEmpty) {
-                          return const _EmptyState(
-                            icon: Icons.notifications_none,
-                            message: 'No upcoming reminders',
-                          );
-                        }
-                        return GlassCard(
-                          child: Column(
-                            children: [
-                              for (final r in reminders.take(3))
-                                ListTile(
-                                  leading: const Icon(Icons.alarm),
-                                  title: Text(r.name),
-                                  subtitle: Text('${r.date} at ${r.time}'),
-                                  dense: true,
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      loading: () => const _LoadingCard(height: 80),
-                      error: (_, _) => const SizedBox.shrink(),
-                    ),
                     const SizedBox(height: 100),
                   ]),
                 ),
@@ -359,10 +284,23 @@ class _BudgetProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = AppThemeExtension.of(context);
-    final progress = summary.budgetLimit > 0
-        ? (summary.budgetSpent / summary.budgetLimit).clamp(0.0, 1.0)
+    final utilization = summary.budgetLimit > 0
+        ? summary.budgetSpent / summary.budgetLimit
         : 0.0;
+    final progress = utilization.clamp(0.0, 1.0);
     final isOverBudget = summary.budgetSpent > summary.budgetLimit;
+    final isNearLimit = !isOverBudget && utilization >= 0.9;
+    final difference = (summary.budgetLimit - summary.budgetSpent).abs();
+
+    final progressColor = isOverBudget
+        ? theme.expenseColor
+        : isNearLimit
+        ? Colors.orange
+        : theme.incomeColor;
+
+    final statusText = isOverBudget
+        ? '${AmountFormatter.format(difference)} exceeded'
+        : '${AmountFormatter.format(difference)} remaining';
 
     return GlassCard(
       child: Column(
@@ -383,6 +321,14 @@ class _BudgetProgress extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+            statusText,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: progressColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -390,7 +336,7 @@ class _BudgetProgress extends StatelessWidget {
               value: progress,
               minHeight: 10,
               backgroundColor: theme.expenseColor.withValues(alpha: 0.15),
-              color: isOverBudget ? theme.expenseColor : theme.incomeColor,
+              color: progressColor,
             ),
           ),
         ],
@@ -491,30 +437,6 @@ class _LoadingCard extends StatelessWidget {
     return SizedBox(
       height: height,
       child: const Center(child: CircularProgressIndicator()),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.icon, required this.message});
-
-  final IconData icon;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Icon(icon, size: 48, color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            style: TextStyle(color: Theme.of(context).colorScheme.outline),
-          ),
-        ],
-      ),
     );
   }
 }
