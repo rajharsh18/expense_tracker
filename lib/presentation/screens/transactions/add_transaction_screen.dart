@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../core/navigation/back_navigation.dart';
 import '../../../core/utils/amount_formatter.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/weight_formatter.dart';
@@ -31,8 +31,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   late TextEditingController _amountController;
   late TextEditingController _nameController;
   late TextEditingController _remarkController;
-  late TextEditingController _fromAccountController;
-  late TextEditingController _toAccountController;
   int? _selectedAccountId;
   String? _selectedCategory;
   String? _selectedPaymentMode;
@@ -48,7 +46,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     super.initState();
     final tx = widget.transaction;
     _isGrainMode = tx?.isGrain ?? false;
-    _type = tx?.type ?? widget.initialType;
+    var resolvedType = tx?.type ?? widget.initialType;
+    if (resolvedType == 'transfer') resolvedType = 'expense';
+    _type = resolvedType;
     if (_isGrainMode) {
       _grainDirection = tx?.isGrainOut == true ? 'out' : 'in';
       _type = _grainDirection == 'out' ? 'grain_out' : 'grain_in';
@@ -63,8 +63,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
     _nameController = TextEditingController(text: tx?.name ?? '');
     _remarkController = TextEditingController(text: tx?.remark ?? '');
-    _fromAccountController = TextEditingController(text: tx?.fromAccount ?? '');
-    _toAccountController = TextEditingController(text: tx?.toAccount ?? '');
     _selectedAccountId = tx?.accountId;
     _selectedCategory = tx?.category.isNotEmpty == true ? tx!.category : null;
     _selectedPaymentMode = tx?.paymentMode.isNotEmpty == true
@@ -74,7 +72,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
     if (tx != null) {
       final parsed = CashBookDateUtils.parseDate(tx.date);
-      if (parsed != null) _selectedDate = parsed;
+      if (parsed != null) {
+        _selectedDate = parsed;
+        final parsedTime = CashBookDateUtils.parseTimeOnDate(tx.time, parsed);
+        if (parsedTime != null) {
+          _selectedTime = TimeOfDay(
+            hour: parsedTime.hour,
+            minute: parsedTime.minute,
+          );
+        }
+      }
     }
   }
 
@@ -83,8 +90,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     _amountController.dispose();
     _nameController.dispose();
     _remarkController.dispose();
-    _fromAccountController.dispose();
-    _toAccountController.dispose();
     super.dispose();
   }
 
@@ -144,9 +149,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             : _type,
         isHeader: 0,
         isBookmarked: _isBookmarked ? 1 : 0,
-        fromAccount: _type == 'transfer' ? _fromAccountController.text : null,
-        toAccount: _type == 'transfer' ? _toAccountController.text : null,
-        transferType: _type == 'transfer' ? 'transfer' : null,
       );
 
       final repo = ref.read(transactionRepositoryProvider);
@@ -157,7 +159,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       }
 
       refreshDatabase(ref);
-      if (mounted) context.pop();
+      if (mounted) navigateToHome(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -172,9 +174,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final accountsAsync = ref.watch(accountsProvider);
+    final currencySymbol = ref.watch(currencySymbolProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(
         title: Text(
           widget.transaction == null ? 'Add Transaction' : 'Edit Transaction',
         ),
@@ -229,10 +232,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       segments: const [
                         ButtonSegment(value: 'expense', label: Text('Expense')),
                         ButtonSegment(value: 'income', label: Text('Income')),
-                        ButtonSegment(
-                          value: 'transfer',
-                          label: Text('Transfer'),
-                        ),
                       ],
                       selected: {_type},
                       onSelectionChanged: (s) =>
@@ -249,7 +248,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       label: _RequiredLabel(
                         text: _isGrainMode ? 'Weight (kg)' : 'Amount',
                       ),
-                      prefixText: _isGrainMode ? null : '₹ ',
+                      prefixText: _isGrainMode ? null : '$currencySymbol ',
                       suffixText: _isGrainMode ? 'kg' : null,
                     ),
                     validator: (v) {
@@ -339,20 +338,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     decoration: const InputDecoration(labelText: 'Remark'),
                     maxLines: 2,
                   ),
-                  if (_type == 'transfer' && !_isGrainMode) ...[
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _fromAccountController,
-                      decoration: const InputDecoration(
-                        labelText: 'From Account',
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _toAccountController,
-                      decoration: const InputDecoration(labelText: 'To Account'),
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Date'),

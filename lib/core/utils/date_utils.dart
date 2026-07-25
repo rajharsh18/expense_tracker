@@ -29,11 +29,18 @@ class CashBookDateUtils {
       _backupFileFormat.format(date);
 
   static DateTime? parseDate(String date) {
+    final trimmed = date.trim();
+    if (trimmed.isEmpty) return null;
+
     try {
-      return _dateFormat.parse(date);
-    } catch (_) {
-      return null;
-    }
+      return _dateFormat.parse(trimmed);
+    } catch (_) {}
+
+    try {
+      return DateFormat('yyyy-MM-dd').parse(trimmed);
+    } catch (_) {}
+
+    return DateTime.tryParse(trimmed);
   }
 
   static DateTime? parseDateTime(String dateTime) {
@@ -45,29 +52,58 @@ class CashBookDateUtils {
   }
 
   static DateTime? parseTimeOnDate(String time, DateTime date) {
-    try {
-      final parsed = _time12Format.parse(time);
-      return DateTime(
-        date.year,
-        date.month,
-        date.day,
-        parsed.hour,
-        parsed.minute,
-      );
-    } catch (_) {
+    final trimmed = time.trim();
+    if (trimmed.isEmpty) {
+      return startOfDay(date);
+    }
+
+    final formats = <DateFormat>[
+      _time12Format,
+      DateFormat('h:mm a'),
+      _time24Format,
+      DateFormat('HH:mm:ss'),
+    ];
+
+    for (final format in formats) {
       try {
-        final parsed = _time24Format.parse(time);
+        final parsed = format.parse(trimmed);
         return DateTime(
           date.year,
           date.month,
           date.day,
           parsed.hour,
           parsed.minute,
+          parsed.second,
         );
-      } catch (_) {
-        return null;
-      }
+      } catch (_) {}
     }
+
+    return null;
+  }
+
+  /// Combines a CashBook transaction date and time for sorting.
+  static DateTime? transactionDateTime(String date, String time) {
+    final parsedDate = parseDate(date);
+    if (parsedDate == null) return null;
+    return parseTimeOnDate(time, parsedDate) ?? startOfDay(parsedDate);
+  }
+
+  /// Newest first. Returns 0 when both values are equal or unparseable.
+  static int compareTransactionDateTimeDesc({
+    required String dateA,
+    required String timeA,
+    required String dateB,
+    required String timeB,
+  }) {
+    final aDateTime = transactionDateTime(dateA, timeA);
+    final bDateTime = transactionDateTime(dateB, timeB);
+
+    if (aDateTime != null && bDateTime != null) {
+      return bDateTime.compareTo(aDateTime);
+    }
+    if (aDateTime != null) return -1;
+    if (bDateTime != null) return 1;
+    return 0;
   }
 
   static DateTime startOfDay(DateTime date) =>

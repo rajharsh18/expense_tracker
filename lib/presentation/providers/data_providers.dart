@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/date_utils.dart';
-import '../../domain/entities/transaction_entity.dart';
 import '../../data/database/database_holder.dart';
+import '../../domain/entities/transaction_entity.dart';
 import 'app_providers.dart';
 
-final transactionsProvider = StreamProvider.autoDispose<List<TransactionEntity>>((ref) {
+export '../models/transaction_filters.dart';
+
+final transactionsProvider =
+    StreamProvider.autoDispose<List<TransactionEntity>>((ref) {
   ref.watch(databaseRefreshProvider);
   return ref.watch(transactionRepositoryProvider).watchAll();
 });
@@ -67,11 +70,16 @@ final accountBalancesProvider =
 final searchFilterProvider =
     StateProvider<SearchFilter>((ref) => const SearchFilter());
 
+/// Requests MainShell to switch to a bottom-nav tab (0=Home, 1=Transactions, ...).
+final shellTabRequestProvider = StateProvider<int?>((ref) => null);
+
 final searchResultsProvider =
     FutureProvider.autoDispose<List<TransactionEntity>>((ref) async {
   ref.watch(databaseRefreshProvider);
   final filter = ref.watch(searchFilterProvider);
-  return ref.watch(transactionRepositoryProvider).search(filter);
+  final results =
+      await ref.watch(transactionRepositoryProvider).search(filter);
+  return results.where((transaction) => !transaction.isTransfer).toList();
 });
 
 enum ReportPeriod { weekly, monthly, yearly }

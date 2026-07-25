@@ -2,14 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../core/navigation/back_navigation.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
 import '../../../core/utils/weight_formatter.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/scaled_amount_text.dart';
 import 'add_transaction_screen.dart';
 
 /// Screen showing transaction details and edit history.
@@ -25,7 +26,7 @@ class TransactionDetailScreen extends ConsumerWidget {
     final theme = AppThemeExtension.of(context);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(
         title: const Text('Transaction Details'),
         actions: [
           IconButton(
@@ -99,7 +100,7 @@ class TransactionDetailScreen extends ConsumerWidget {
               GlassCard(
                 child: Column(
                   children: [
-                    Text(
+                    ScaledAmountText(
                       tx.isGrain
                           ? '${tx.isGrainOut ? '-' : '+'}${WeightFormatter.format(tx.amount)}'
                           : AmountFormatter.formatSigned(
@@ -183,7 +184,7 @@ class TransactionDetailScreen extends ConsumerWidget {
     if (confirmed == true) {
       await ref.read(transactionRepositoryProvider).delete(transactionId);
       refreshDatabase(ref);
-      if (context.mounted) context.pop();
+      if (context.mounted) navigateToHome(context);
     }
   }
 }

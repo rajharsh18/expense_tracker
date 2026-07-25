@@ -1,23 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
+import '../../../domain/entities/transaction_entity.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/scaled_amount_text.dart';
 
 /// Main dashboard screen with balance and summary.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _budgetAlertAttempted = false;
+
+  Future<void> _maybeShowBudgetAlert(DashboardSummary summary) async {
+    if (_budgetAlertAttempted) return;
+    _budgetAlertAttempted = true;
+
+    final settings = ref.read(settingsServiceProvider);
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (settings.budgetAlertShownDate == today) return;
+
+    if (summary.budgetLimit <= 0) return;
+
+    final utilization = summary.budgetSpent / summary.budgetLimit;
+    if (utilization < 0.9) return;
+
+    if (!mounted) return;
+
+    final percent = (utilization * 100).round();
+    final isOverBudget = summary.budgetSpent > summary.budgetLimit;
+    final difference = (summary.budgetLimit - summary.budgetSpent).abs();
+    final amountText = AmountFormatter.format(difference);
+    final theme = AppThemeExtension.of(context);
+
+    final message = isOverBudget
+        ? 'You have surpassed $percent% of your budget. $amountText exceeded.'
+        : 'You have used $percent% of your budget. $amountText remaining.';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          Icons.warning_amber_rounded,
+          color: theme.expenseColor,
+          size: 32,
+        ),
+        title: const Text('Budget Alert'),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+
+    await settings.setBudgetAlertShownDate(today);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final summaryAsync = ref.watch(dashboardSummaryProvider);
     final remindersAsync = ref.watch(remindersProvider);
     final theme = AppThemeExtension.of(context);
-    final colorScheme = Theme.of(context).colorScheme;
+
+    ref.listen<AsyncValue<DashboardSummary>>(dashboardSummaryProvider, (_, next) {
+      if (next.hasValue) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _maybeShowBudgetAlert(next.value!);
+        });
+      }
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -51,7 +118,7 @@ class DashboardScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Notifications',
+                              'Reminders',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
@@ -61,7 +128,7 @@ class DashboardScreen extends ConsumerWidget {
                                 children: [
                                   for (final r in reminders)
                                     ListTile(
-                                      leading: const Icon(Icons.notifications),
+                                      leading: const Icon(Icons.event_note),
                                       title: Text(r.name),
                                       subtitle: Text('${r.date} at ${r.time}'),
                                       dense: true,
@@ -120,24 +187,33 @@ class DashboardScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 12),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _SummaryItem(
-                                  label: 'Income',
-                                  amount: summary.monthlyIncome,
-                                  color: theme.incomeColor,
+                                Expanded(
+                                  child: _SummaryItem(
+                                    label: 'Income',
+                                    amount: summary.monthlyIncome,
+                                    color: theme.incomeColor,
+                                  ),
                                 ),
-                                _SummaryItem(
-                                  label: 'Expense',
-                                  amount: summary.monthlyExpense,
-                                  color: theme.expenseColor,
+                                Expanded(
+                                  child: _SummaryItem(
+                                    label: 'Expense',
+                                    amount: summary.monthlyExpense,
+                                    color: theme.expenseColor,
+                                  ),
                                 ),
-                                _SummaryItem(
-                                  label: 'Net',
-                                  amount:
+                                Expanded(
+                                  child: _SummaryItem(
+                                    label: 'Net',
+                                    amount:
+                                        summary.monthlyIncome -
+                                        summary.monthlyExpense,
+                                    color: theme.netColor(
                                       summary.monthlyIncome -
-                                      summary.monthlyExpense,
-                                  color: colorScheme.primary,
+                                          summary.monthlyExpense,
+                                    ),
+                                    signed: true,
+                                  ),
                                 ),
                               ],
                             ),
@@ -176,13 +252,17 @@ class _BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = AppThemeExtension.of(context);
+    final balance = summary.totalBalance as int;
+    final isNegative = balance < 0;
+    final backgroundColor = isNegative ? theme.expenseColor : theme.incomeColor;
+    final labelColor = Colors.white.withValues(alpha: 0.85);
 
     return GlassCard(
       gradient: LinearGradient(
         colors: [
-          colorScheme.primary,
-          colorScheme.primary.withValues(alpha: 0.8),
+          backgroundColor,
+          backgroundColor.withValues(alpha: 0.85),
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -193,17 +273,21 @@ class _BalanceCard extends StatelessWidget {
           Text(
             'Current Balance',
             style: TextStyle(
-              color: colorScheme.onPrimary.withValues(alpha: 0.8),
+              color: labelColor,
               fontSize: 14,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            AmountFormatter.format(summary.totalBalance),
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
+          SizedBox(
+            width: double.infinity,
+            child: ScaledAmountText(
+              AmountFormatter.format(balance),
+              alignment: Alignment.centerLeft,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -236,8 +320,9 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 4),
-          Text(
+          ScaledAmountText(
             AmountFormatter.format(amount),
+            alignment: Alignment.centerLeft,
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: color,
@@ -255,20 +340,26 @@ class _SummaryItem extends StatelessWidget {
     required this.label,
     required this.amount,
     required this.color,
+    this.signed = false,
   });
 
   final String label;
   final int amount;
   final Color color;
+  final bool signed;
 
   @override
   Widget build(BuildContext context) {
+    final text = signed
+        ? AmountFormatter.formatSigned(amount.abs(), isExpense: amount < 0)
+        : AmountFormatter.format(amount);
+
     return Column(
       children: [
         Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
-        Text(
-          AmountFormatter.format(amount),
+        ScaledAmountText(
+          text,
           style: TextStyle(fontWeight: FontWeight.w700, color: color),
         ),
       ],
@@ -315,16 +406,20 @@ class _BudgetProgress extends StatelessWidget {
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              Text(
-                '${AmountFormatter.format(summary.budgetSpent)} / ${AmountFormatter.format(summary.budgetLimit)}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Expanded(
+                child: ScaledAmountText(
+                  '${AmountFormatter.format(summary.budgetSpent)} / ${AmountFormatter.format(summary.budgetLimit)}',
+                  alignment: Alignment.centerRight,
+                  style: Theme.of(context).textTheme.bodySmall!,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
+          ScaledAmountText(
             statusText,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            alignment: Alignment.centerLeft,
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
               color: progressColor,
               fontWeight: FontWeight.w600,
             ),
@@ -352,16 +447,6 @@ class _QuickActions extends StatelessWidget {
       children: [
         Expanded(
           child: _ActionButton(
-            label: 'Expense',
-            icon: Icons.remove_circle_outline,
-            color: AppThemeExtension.of(context).expenseColor,
-            onTap: () =>
-                context.push('${AppRouter.addTransaction}?type=expense'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _ActionButton(
             label: 'Income',
             icon: Icons.add_circle_outline,
             color: AppThemeExtension.of(context).incomeColor,
@@ -369,14 +454,14 @@ class _QuickActions extends StatelessWidget {
                 context.push('${AppRouter.addTransaction}?type=income'),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(
           child: _ActionButton(
-            label: 'Transfer',
-            icon: Icons.swap_horiz,
-            color: AppThemeExtension.of(context).transferColor,
+            label: 'Expense',
+            icon: Icons.remove_circle_outline,
+            color: AppThemeExtension.of(context).expenseColor,
             onTap: () =>
-                context.push('${AppRouter.addTransaction}?type=transfer'),
+                context.push('${AppRouter.addTransaction}?type=expense'),
           ),
         ),
       ],

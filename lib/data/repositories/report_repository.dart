@@ -25,8 +25,8 @@ class ReportRepository {
     var totalExpense = 0;
     var totalTransfer = 0;
     final categoryBreakdown = <String, int>{};
-    final paymentModeBreakdown = <String, int>{};
-    final accountBreakdown = <String, int>{};
+    final paymentModeBreakdown = <String, ChartPoint>{};
+    final accountBreakdown = <String, ChartPoint>{};
     final dailyMap = <String, ChartPoint>{};
 
     final accounts = await _accountRepo.getAll();
@@ -35,7 +35,8 @@ class ReportRepository {
     for (final tx in transactions) {
       if (tx.type == 'grain' ||
           tx.type == 'grain_in' ||
-          tx.type == 'grain_out') {
+          tx.type == 'grain_out' ||
+          tx.type == 'transfer') {
         continue;
       }
 
@@ -46,22 +47,39 @@ class ReportRepository {
       switch (tx.type) {
         case 'income':
           totalIncome += tx.amount;
+          _accumulateBreakdown(
+            accountBreakdown,
+            accountMap[tx.accountId] ?? 'Unknown',
+            amount: tx.amount,
+            isIncome: true,
+          );
+          if (tx.paymentMode.isNotEmpty) {
+            _accumulateBreakdown(
+              paymentModeBreakdown,
+              tx.paymentMode,
+              amount: tx.amount,
+              isIncome: true,
+            );
+          }
         case 'expense':
           totalExpense += tx.amount;
           final cat = tx.category.isEmpty ? 'Uncategorized' : tx.category;
           categoryBreakdown[cat] = (categoryBreakdown[cat] ?? 0) + tx.amount;
-        case 'transfer':
-          totalTransfer += tx.amount;
+          _accumulateBreakdown(
+            accountBreakdown,
+            accountMap[tx.accountId] ?? 'Unknown',
+            amount: tx.amount,
+            isIncome: false,
+          );
+          if (tx.paymentMode.isNotEmpty) {
+            _accumulateBreakdown(
+              paymentModeBreakdown,
+              tx.paymentMode,
+              amount: tx.amount,
+              isIncome: false,
+            );
+          }
       }
-
-      if (tx.paymentMode.isNotEmpty) {
-        paymentModeBreakdown[tx.paymentMode] =
-            (paymentModeBreakdown[tx.paymentMode] ?? 0) + tx.amount;
-      }
-
-      final accountName = accountMap[tx.accountId] ?? 'Unknown';
-      accountBreakdown[accountName] =
-          (accountBreakdown[accountName] ?? 0) + tx.amount;
 
       final dayKey = CashBookDateUtils.formatDate(txDate);
       final existing = dailyMap[dayKey];
@@ -270,6 +288,29 @@ class ReportRepository {
       accountBreakdownIn: accountBreakdownIn,
       accountBreakdownOut: accountBreakdownOut,
       dailyPoints: dailyPoints,
+    );
+  }
+
+  void _accumulateBreakdown(
+    Map<String, ChartPoint> breakdown,
+    String key, {
+    required int amount,
+    required bool isIncome,
+  }) {
+    final existing = breakdown[key];
+    if (existing == null) {
+      breakdown[key] = ChartPoint(
+        label: key,
+        income: isIncome ? amount : 0,
+        expense: isIncome ? 0 : amount,
+      );
+      return;
+    }
+
+    breakdown[key] = ChartPoint(
+      label: key,
+      income: existing.income + (isIncome ? amount : 0),
+      expense: existing.expense + (isIncome ? 0 : amount),
     );
   }
 }

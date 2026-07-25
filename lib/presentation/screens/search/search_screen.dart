@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/navigation/back_navigation.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/glass_card.dart';
@@ -51,7 +52,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ref.watch(paymentModesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Search')),
+      appBar: const AppPageAppBar(title: Text('Search')),
       body: Column(
         children: [
           Padding(
@@ -146,7 +147,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   DropdownMenuItem(value: null, child: Text('All')),
                   DropdownMenuItem(value: 'income', child: Text('Income')),
                   DropdownMenuItem(value: 'expense', child: Text('Expense')),
-                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
                 ],
                 onChanged: (v) => setModalState(() => _typeFilter = v),
               ),

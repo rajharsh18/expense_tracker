@@ -98,8 +98,8 @@ abstract class ReportData with _$ReportData {
     required int totalExpense,
     required int totalTransfer,
     required Map<String, int> categoryBreakdown,
-    required Map<String, int> paymentModeBreakdown,
-    required Map<String, int> accountBreakdown,
+    required Map<String, ChartPoint> paymentModeBreakdown,
+    required Map<String, ChartPoint> accountBreakdown,
     required List<ChartPoint> dailyPoints,
   }) = _ReportData;
 }

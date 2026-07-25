@@ -8,6 +8,7 @@ import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../data/services/backup_service.dart';
+import '../../data/services/data_export_service.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('SharedPreferences must be overridden in main()');
@@ -47,6 +48,13 @@ final reportRepositoryProvider = Provider<ReportRepository>((ref) {
 
 final backupServiceProvider = Provider<BackupService>((ref) {
   return BackupService(ref.watch(databaseProvider));
+});
+
+final dataExportServiceProvider = Provider<DataExportService>((ref) {
+  return DataExportService(
+    ref.watch(transactionRepositoryProvider),
+    ref.watch(accountRepositoryProvider),
+  );
 });
 
 final darkModeProvider =

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/navigation/back_navigation.dart';
 import '../../../core/utils/amount_formatter.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/scaled_amount_text.dart';
 
 /// Screen for managing accounts/ledgers.
 class AccountsScreen extends ConsumerWidget {
@@ -18,7 +20,7 @@ class AccountsScreen extends ConsumerWidget {
     final balancesAsync = ref.watch(accountBalancesProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(
         title: const Text('Accounts'),
         actions: [
           IconButton(
@@ -67,8 +69,10 @@ class AccountsScreen extends ConsumerWidget {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(account.dateTime),
-                    trailing: Text(
+                    trailing: ScaledAmountText(
                       AmountFormatter.format(balance),
+                      alignment: Alignment.centerRight,
+                      maxWidthFraction: 0.35,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: balance >= 0
@@ -102,7 +106,7 @@ class AccountsScreen extends ConsumerWidget {
         TextEditingController(text: account?.entryName ?? '');
     final isEdit = account != null;
 
-    final result = await showDialog<bool>(
+    final result = await showDialog<dynamic>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isEdit ? 'Edit Account' : 'Add Account'),
@@ -114,13 +118,7 @@ class AccountsScreen extends ConsumerWidget {
         actions: [
           if (isEdit)
             TextButton(
-              onPressed: () async {
-                await ref
-                    .read(accountRepositoryProvider)
-                    .delete(account.id!);
-                refreshDatabase(ref);
-                if (ctx.mounted) Navigator.pop(ctx, true);
-              },
+              onPressed: () => Navigator.pop(ctx, 'delete'),
               child: Text(
                 'Delete',
                 style: TextStyle(
@@ -140,7 +138,32 @@ class AccountsScreen extends ConsumerWidget {
       ),
     );
 
-    if (result == true && nameController.text.isNotEmpty) {
+    if (result == 'delete' && isEdit) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Account'),
+          content: Text(
+            'Are you sure you want to delete "${account.entryName}"? '
+            'This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await ref.read(accountRepositoryProvider).delete(account.id!);
+        refreshDatabase(ref);
+      }
+    } else if (result == true && nameController.text.isNotEmpty) {
       final repo = ref.read(accountRepositoryProvider);
       if (isEdit) {
         await repo.update(

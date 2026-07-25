@@ -1658,7 +1658,7 @@ as int,
 /// @nodoc
 mixin _$ReportData {
 
- int get totalIncome; int get totalExpense; int get totalTransfer; Map<String, int> get categoryBreakdown; Map<String, int> get paymentModeBreakdown; Map<String, int> get accountBreakdown; List<ChartPoint> get dailyPoints;
+ int get totalIncome; int get totalExpense; int get totalTransfer; Map<String, int> get categoryBreakdown; Map<String, ChartPoint> get paymentModeBreakdown; Map<String, ChartPoint> get accountBreakdown; List<ChartPoint> get dailyPoints;
 /// Create a copy of ReportData
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1689,7 +1689,7 @@ abstract mixin class $ReportDataCopyWith<$Res>  {
   factory $ReportDataCopyWith(ReportData value, $Res Function(ReportData) _then) = _$ReportDataCopyWithImpl;
 @useResult
 $Res call({
- int totalIncome, int totalExpense, int totalTransfer, Map<String, int> categoryBreakdown, Map<String, int> paymentModeBreakdown, Map<String, int> accountBreakdown, List<ChartPoint> dailyPoints
+ int totalIncome, int totalExpense, int totalTransfer, Map<String, int> categoryBreakdown, Map<String, ChartPoint> paymentModeBreakdown, Map<String, ChartPoint> accountBreakdown, List<ChartPoint> dailyPoints
 });
 
 
@@ -1713,8 +1713,8 @@ as int,totalExpense: null == totalExpense ? _self.totalExpense : totalExpense //
 as int,totalTransfer: null == totalTransfer ? _self.totalTransfer : totalTransfer // ignore: cast_nullable_to_non_nullable
 as int,categoryBreakdown: null == categoryBreakdown ? _self.categoryBreakdown : categoryBreakdown // ignore: cast_nullable_to_non_nullable
 as Map<String, int>,paymentModeBreakdown: null == paymentModeBreakdown ? _self.paymentModeBreakdown : paymentModeBreakdown // ignore: cast_nullable_to_non_nullable
-as Map<String, int>,accountBreakdown: null == accountBreakdown ? _self.accountBreakdown : accountBreakdown // ignore: cast_nullable_to_non_nullable
-as Map<String, int>,dailyPoints: null == dailyPoints ? _self.dailyPoints : dailyPoints // ignore: cast_nullable_to_non_nullable
+as Map<String, ChartPoint>,accountBreakdown: null == accountBreakdown ? _self.accountBreakdown : accountBreakdown // ignore: cast_nullable_to_non_nullable
+as Map<String, ChartPoint>,dailyPoints: null == dailyPoints ? _self.dailyPoints : dailyPoints // ignore: cast_nullable_to_non_nullable
 as List<ChartPoint>,
   ));
 }
@@ -1800,7 +1800,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, int> paymentModeBreakdown,  Map<String, int> accountBreakdown,  List<ChartPoint> dailyPoints)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, ChartPoint> paymentModeBreakdown,  Map<String, ChartPoint> accountBreakdown,  List<ChartPoint> dailyPoints)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ReportData() when $default != null:
 return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.categoryBreakdown,_that.paymentModeBreakdown,_that.accountBreakdown,_that.dailyPoints);case _:
@@ -1821,7 +1821,7 @@ return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.c
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, int> paymentModeBreakdown,  Map<String, int> accountBreakdown,  List<ChartPoint> dailyPoints)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, ChartPoint> paymentModeBreakdown,  Map<String, ChartPoint> accountBreakdown,  List<ChartPoint> dailyPoints)  $default,) {final _that = this;
 switch (_that) {
 case _ReportData():
 return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.categoryBreakdown,_that.paymentModeBreakdown,_that.accountBreakdown,_that.dailyPoints);case _:
@@ -1841,7 +1841,7 @@ return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.c
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, int> paymentModeBreakdown,  Map<String, int> accountBreakdown,  List<ChartPoint> dailyPoints)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int totalIncome,  int totalExpense,  int totalTransfer,  Map<String, int> categoryBreakdown,  Map<String, ChartPoint> paymentModeBreakdown,  Map<String, ChartPoint> accountBreakdown,  List<ChartPoint> dailyPoints)?  $default,) {final _that = this;
 switch (_that) {
 case _ReportData() when $default != null:
 return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.categoryBreakdown,_that.paymentModeBreakdown,_that.accountBreakdown,_that.dailyPoints);case _:
@@ -1856,7 +1856,7 @@ return $default(_that.totalIncome,_that.totalExpense,_that.totalTransfer,_that.c
 
 
 class _ReportData implements ReportData {
-  const _ReportData({required this.totalIncome, required this.totalExpense, required this.totalTransfer, required final  Map<String, int> categoryBreakdown, required final  Map<String, int> paymentModeBreakdown, required final  Map<String, int> accountBreakdown, required final  List<ChartPoint> dailyPoints}): _categoryBreakdown = categoryBreakdown,_paymentModeBreakdown = paymentModeBreakdown,_accountBreakdown = accountBreakdown,_dailyPoints = dailyPoints;
+  const _ReportData({required this.totalIncome, required this.totalExpense, required this.totalTransfer, required final  Map<String, int> categoryBreakdown, required final  Map<String, ChartPoint> paymentModeBreakdown, required final  Map<String, ChartPoint> accountBreakdown, required final  List<ChartPoint> dailyPoints}): _categoryBreakdown = categoryBreakdown,_paymentModeBreakdown = paymentModeBreakdown,_accountBreakdown = accountBreakdown,_dailyPoints = dailyPoints;
   
 
 @override final  int totalIncome;
@@ -1869,15 +1869,15 @@ class _ReportData implements ReportData {
   return EqualUnmodifiableMapView(_categoryBreakdown);
 }
 
- final  Map<String, int> _paymentModeBreakdown;
-@override Map<String, int> get paymentModeBreakdown {
+ final  Map<String, ChartPoint> _paymentModeBreakdown;
+@override Map<String, ChartPoint> get paymentModeBreakdown {
   if (_paymentModeBreakdown is EqualUnmodifiableMapView) return _paymentModeBreakdown;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableMapView(_paymentModeBreakdown);
 }
 
- final  Map<String, int> _accountBreakdown;
-@override Map<String, int> get accountBreakdown {
+ final  Map<String, ChartPoint> _accountBreakdown;
+@override Map<String, ChartPoint> get accountBreakdown {
   if (_accountBreakdown is EqualUnmodifiableMapView) return _accountBreakdown;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableMapView(_accountBreakdown);
@@ -1921,7 +1921,7 @@ abstract mixin class _$ReportDataCopyWith<$Res> implements $ReportDataCopyWith<$
   factory _$ReportDataCopyWith(_ReportData value, $Res Function(_ReportData) _then) = __$ReportDataCopyWithImpl;
 @override @useResult
 $Res call({
- int totalIncome, int totalExpense, int totalTransfer, Map<String, int> categoryBreakdown, Map<String, int> paymentModeBreakdown, Map<String, int> accountBreakdown, List<ChartPoint> dailyPoints
+ int totalIncome, int totalExpense, int totalTransfer, Map<String, int> categoryBreakdown, Map<String, ChartPoint> paymentModeBreakdown, Map<String, ChartPoint> accountBreakdown, List<ChartPoint> dailyPoints
 });
 
 
@@ -1945,8 +1945,8 @@ as int,totalExpense: null == totalExpense ? _self.totalExpense : totalExpense //
 as int,totalTransfer: null == totalTransfer ? _self.totalTransfer : totalTransfer // ignore: cast_nullable_to_non_nullable
 as int,categoryBreakdown: null == categoryBreakdown ? _self._categoryBreakdown : categoryBreakdown // ignore: cast_nullable_to_non_nullable
 as Map<String, int>,paymentModeBreakdown: null == paymentModeBreakdown ? _self._paymentModeBreakdown : paymentModeBreakdown // ignore: cast_nullable_to_non_nullable
-as Map<String, int>,accountBreakdown: null == accountBreakdown ? _self._accountBreakdown : accountBreakdown // ignore: cast_nullable_to_non_nullable
-as Map<String, int>,dailyPoints: null == dailyPoints ? _self._dailyPoints : dailyPoints // ignore: cast_nullable_to_non_nullable
+as Map<String, ChartPoint>,accountBreakdown: null == accountBreakdown ? _self._accountBreakdown : accountBreakdown // ignore: cast_nullable_to_non_nullable
+as Map<String, ChartPoint>,dailyPoints: null == dailyPoints ? _self._dailyPoints : dailyPoints // ignore: cast_nullable_to_non_nullable
 as List<ChartPoint>,
   ));
 }

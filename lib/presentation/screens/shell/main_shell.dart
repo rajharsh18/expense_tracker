@@ -1,21 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../models/transaction_filters.dart';
+import '../../providers/data_providers.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../reports/reports_screen.dart';
+import '../settings/settings_screen.dart';
+import '../transactions/transactions_screen.dart';
 
 /// Main scaffold with bottom navigation bar and center add action.
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.child});
 
   final Widget child;
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
-
+class _MainShellState extends ConsumerState<MainShell>
+    with WidgetsBindingObserver {
   static final _routes = [
     AppRouter.dashboard,
     AppRouter.transactions,
@@ -23,21 +29,104 @@ class _MainShellState extends State<MainShell> {
     AppRouter.settings,
   ];
 
-  void _onTap(int index) {
+  late final PageController _pageController;
+  int _currentIndex = 0;
+  bool _pageControllerReady = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_pageControllerReady) {
+      final index = _indexFromRoute(context);
+      _currentIndex = index;
+      _pageController = PageController(initialPage: index);
+      _pageControllerReady = true;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_pageControllerReady) {
+      _pageController.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      ref.read(transactionFiltersProvider.notifier).reset();
+    }
+  }
+
+  int _indexFromRoute(BuildContext context) {
+    final location = GoRouterState.of(context).uri.path;
+    final index = _routes.indexWhere((r) => location == r);
+    return index < 0 ? 0 : index;
+  }
+
+  void _onPageChanged(int index) {
+    if (index == _currentIndex) return;
     setState(() => _currentIndex = index);
     context.go(_routes[index]);
   }
 
+  void _onTap(int index) {
+    if (index == _currentIndex) return;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.path;
-    _currentIndex = _routes.indexWhere((r) => location == r);
-    if (_currentIndex < 0) _currentIndex = 0;
+    ref.listen<int?>(shellTabRequestProvider, (previous, next) {
+      if (next == null || next == _currentIndex) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_pageControllerReady || !_pageController.hasClients) {
+          return;
+        }
+        _pageController.jumpToPage(next);
+        setState(() => _currentIndex = next);
+        context.go(_routes[next]);
+        ref.read(shellTabRequestProvider.notifier).state = null;
+      });
+    });
+
+    final routeIndex = _indexFromRoute(context);
+    if (routeIndex != _currentIndex && _pageControllerReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_pageController.hasClients) return;
+        if (_pageController.page?.round() != routeIndex) {
+          _pageController.jumpToPage(routeIndex);
+          setState(() => _currentIndex = routeIndex);
+        }
+      });
+    }
 
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: widget.child,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        children: const [
+          DashboardScreen(),
+          TransactionsScreen(),
+          ReportsScreen(),
+          SettingsScreen(),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),

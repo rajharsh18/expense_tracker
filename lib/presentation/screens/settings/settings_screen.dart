@@ -1,18 +1,22 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/models/backup_metadata.dart';
+import '../../../data/models/export_options.dart';
 import '../../../data/database/app_database.dart';
 import '../../../data/database/database_holder.dart';
 import '../../providers/app_providers.dart';
+import 'export_options_sheet.dart';
 
 /// Settings screen with backup, theme, and app configuration.
 class SettingsScreen extends ConsumerWidget {
@@ -22,9 +26,6 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(darkModeProvider);
     final settings = ref.watch(settingsServiceProvider);
-    final budgetReminder = ref.watch(budgetReminderProvider);
-    final dailyReminder = ref.watch(dailyReminderProvider);
-    final monthlyReminder = ref.watch(monthlyReminderProvider);
     final budgetLimit = ref.watch(budgetLimitProvider);
 
     return Scaffold(
@@ -44,38 +45,19 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Monthly Budget'),
             subtitle: Text(
               budgetLimit > 0
-                  ? '${settings.currencySymbol}${(budgetLimit / 100).toStringAsFixed(2)}'
+                  ? '${settings.currencySymbol} ${(budgetLimit / 100).toStringAsFixed(2)}'
                   : 'Not set',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showBudgetDialog(context, ref),
           ),
-          SwitchListTile(
-            title: const Text('Budget Reminder'),
-            value: budgetReminder,
-            onChanged: (v) =>
-                ref.read(budgetReminderProvider.notifier).set(v),
-          ),
-          const Divider(),
-          _SectionHeader(title: 'Reminders'),
-          SwitchListTile(
-            title: const Text('Daily Reminder'),
-            value: dailyReminder,
-            onChanged: (v) => ref.read(dailyReminderProvider.notifier).set(v),
-          ),
-          SwitchListTile(
-            title: const Text('Monthly Reminder'),
-            value: monthlyReminder,
-            onChanged: (v) =>
-                ref.read(monthlyReminderProvider.notifier).set(v),
-          ),
           const Divider(),
           _SectionHeader(title: 'Backup & Restore'),
           ListTile(
             leading: const Icon(Icons.upload_file),
-            title: const Text('Export Backup'),
-            subtitle: const Text('Create CashBook-compatible ZIP'),
-            onTap: () => _exportBackup(context, ref),
+            title: const Text('Export Data'),
+            subtitle: const Text('ZIP backup, PDF report, or Excel report'),
+            onTap: () => _exportData(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.download),
@@ -128,6 +110,91 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _exportData(BuildContext context, WidgetRef ref) async {
+    final format = await showExportFormatDialog(context);
+    if (format == null || !context.mounted) return;
+
+    switch (format) {
+      case ExportFormat.zip:
+        await _exportBackup(context, ref);
+      case ExportFormat.pdf:
+      case ExportFormat.excel:
+        await _exportFilteredReport(context, ref, format);
+    }
+  }
+
+  Future<void> _exportFilteredReport(
+    BuildContext context,
+    WidgetRef ref,
+    ExportFormat format,
+  ) async {
+    final options = await showExportOptionsSheet(context, format);
+    if (options == null || !context.mounted) return;
+
+    final exportService = ref.read(dataExportServiceProvider);
+    try {
+      final transactions = await exportService.fetchFiltered(options);
+      final accountNames = await exportService.accountNameMap();
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final Uint8List bytes;
+      final String fileName;
+      final String dialogTitle;
+      final List<String> allowedExtensions;
+
+      if (format == ExportFormat.pdf) {
+        bytes = await exportService.generatePdf(
+          transactions: transactions,
+          accountNames: accountNames,
+          options: options,
+        );
+        fileName = 'transactions_$timestamp.pdf';
+        dialogTitle = 'Save PDF Report';
+        allowedExtensions = ['pdf'];
+      } else {
+        bytes = await exportService.generateExcelCsv(
+          transactions: transactions,
+          accountNames: accountNames,
+        );
+        fileName = 'transactions_$timestamp.csv';
+        dialogTitle = 'Save Excel Report';
+        allowedExtensions = ['csv'];
+      }
+
+      if (!context.mounted) return;
+
+      final savedPath = await _saveExportedFile(
+        bytes: bytes,
+        fileName: fileName,
+        dialogTitle: dialogTitle,
+        allowedExtensions: allowedExtensions,
+      );
+
+      if (!context.mounted) return;
+
+      if (savedPath != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              transactions.isEmpty
+                  ? 'Export saved with no matching transactions to $savedPath'
+                  : 'Export saved to $savedPath',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Export cancelled')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _exportBackup(BuildContext context, WidgetRef ref) async {
     final backupService = ref.read(backupServiceProvider);
     String? exportPath;
@@ -159,16 +226,29 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<String?> _saveExportedBackup(String exportPath) async {
-    final fileName = p.basename(exportPath);
-    final downloadsDir = await _resolveDownloadsDirectory();
     final bytes = await File(exportPath).readAsBytes();
+    return _saveExportedFile(
+      bytes: bytes,
+      fileName: p.basename(exportPath),
+      dialogTitle: 'Save Backup',
+      allowedExtensions: const ['zip'],
+    );
+  }
+
+  Future<String?> _saveExportedFile({
+    required Uint8List bytes,
+    required String fileName,
+    required String dialogTitle,
+    required List<String> allowedExtensions,
+  }) async {
+    final downloadsDir = await _resolveDownloadsDirectory();
 
     return FilePicker.platform.saveFile(
-      dialogTitle: 'Save Backup',
+      dialogTitle: dialogTitle,
       fileName: fileName,
       initialDirectory: downloadsDir,
       type: FileType.custom,
-      allowedExtensions: ['zip'],
+      allowedExtensions: allowedExtensions,
       bytes: bytes,
     );
   }
@@ -246,6 +326,8 @@ class SettingsScreen extends ConsumerWidget {
           : '',
     );
 
+    final currencySymbol = ref.read(settingsServiceProvider).currencySymbol;
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -253,9 +335,9 @@ class SettingsScreen extends ConsumerWidget {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Budget Amount',
-            prefixText: '₹ ',
+            prefixText: '$currencySymbol ',
           ),
         ),
         actions: [

@@ -120,6 +120,57 @@ void main() {
       expect(results.first.name, 'Groceries shopping');
     });
 
+    test('sorts transactions by date and time newest first', () async {
+      final accountId = await accountRepo.insert(
+        AccountEntity(
+          entryName: 'Cash',
+          dateTime: CashBookDateUtils.formatDateTime(DateTime.now()),
+        ),
+      );
+
+      await transactionRepo.insert(
+        TransactionEntity(
+          accountId: accountId,
+          categoryId: 0,
+          date: '01 Jan 2025',
+          time: '10:00',
+          amount: 10000,
+          name: 'Older',
+          category: '',
+          remark: '',
+          paymentMode: 'Cash',
+          lastEditedDate: '16 Jul 2026',
+          lastEditedTime: '10:00',
+          imageUris: '[]',
+          type: 'expense',
+          isHeader: 0,
+        ),
+      );
+
+      await transactionRepo.insert(
+        TransactionEntity(
+          accountId: accountId,
+          categoryId: 0,
+          date: '16 Jul 2026',
+          time: '09:00',
+          amount: 20000,
+          name: 'Newer',
+          category: '',
+          remark: '',
+          paymentMode: 'Cash',
+          lastEditedDate: '01 Jan 2025',
+          lastEditedTime: '09:00',
+          imageUris: '[]',
+          type: 'expense',
+          isHeader: 0,
+        ),
+      );
+
+      final transactions = await transactionRepo.getAll();
+      expect(transactions.first.name, 'Newer');
+      expect(transactions.last.name, 'Older');
+    });
+
     test('toggles bookmark', () async {
       final accountId = await accountRepo.insert(
         AccountEntity(

@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/amount_formatter.dart';
 import '../../core/utils/weight_formatter.dart';
 import '../../domain/entities/transaction_entity.dart';
+import 'scaled_amount_text.dart';
 
 /// List tile for displaying a transaction.
 class TransactionTile extends StatelessWidget {
@@ -30,10 +31,10 @@ class TransactionTile extends StatelessWidget {
     switch (transaction.type) {
       case 'income':
         typeColor = theme.incomeColor;
-        typeIcon = Icons.arrow_upward_rounded;
+        typeIcon = Icons.arrow_downward_rounded;
       case 'expense':
         typeColor = theme.expenseColor;
-        typeIcon = Icons.arrow_downward_rounded;
+        typeIcon = Icons.arrow_upward_rounded;
       case 'transfer':
         typeColor = theme.transferColor;
         typeIcon = Icons.swap_horiz_rounded;
@@ -57,16 +58,19 @@ class TransactionTile extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+      visualDensity: VisualDensity.compact,
+      minVerticalPadding: 0,
       leading: CircleAvatar(
+        radius: 16,
         backgroundColor: typeColor.withValues(alpha: 0.15),
-        child: Icon(typeIcon, color: typeColor, size: 20),
+        child: Icon(typeIcon, color: typeColor, size: 16),
       ),
       title: Text(
         title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
       ),
       subtitle: Text(
         [
@@ -76,17 +80,20 @@ class TransactionTile extends StatelessWidget {
         ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall,
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          ScaledAmountText(
             transaction.isGrain
                 ? '${transaction.isGrainOut ? '-' : '+'}${WeightFormatter.format(transaction.amount)}'
                 : AmountFormatter.formatSigned(
                     transaction.amount,
                     isExpense: transaction.isExpense,
                   ),
+            alignment: Alignment.centerRight,
+            maxWidthFraction: 0.32,
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: typeColor,

@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/amount_formatter.dart';
 import '../../../core/utils/weight_formatter.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/data_providers.dart';
+import '../../models/transaction_filters.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/scaled_amount_text.dart';
 
 /// Analytics and reports screen.
 class ReportsScreen extends ConsumerWidget {
@@ -72,7 +77,8 @@ class ReportsScreen extends ConsumerWidget {
           Expanded(
             child: reportMode == ReportMode.money
                 ? reportAsync.when(
-                    data: (report) => _MoneyReportView(report: report, theme: theme),
+                    data: (report) =>
+                        _MoneyReportView(report: report, theme: theme),
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('Error: $e')),
@@ -90,14 +96,38 @@ class ReportsScreen extends ConsumerWidget {
   }
 }
 
-class _MoneyReportView extends StatelessWidget {
+class _MoneyReportView extends ConsumerWidget {
   const _MoneyReportView({required this.report, required this.theme});
 
   final ReportData report;
   final AppThemeExtension theme;
 
+  Future<void> _openAccountTransactions(
+    WidgetRef ref,
+    BuildContext context,
+    String accountName,
+  ) async {
+    if (accountName.trim().isEmpty || accountName == 'Unknown') return;
+
+    final accounts = await ref.read(accountRepositoryProvider).getAll();
+    final normalized = accountName.trim().toLowerCase();
+
+    AccountEntity? match;
+    for (final account in accounts) {
+      if (account.entryName.trim().toLowerCase() == normalized) {
+        match = account;
+        break;
+      }
+    }
+    if (match?.id == null) return;
+
+    ref.read(transactionFiltersProvider.notifier).setAccountId(match!.id);
+    ref.read(shellTabRequestProvider.notifier).state = 1;
+    context.go(AppRouter.transactions);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -122,22 +152,12 @@ class _MoneyReportView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         GlassCard(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _ReportStatCard(
-                label: 'Net',
-                amount: report.totalIncome - report.totalExpense,
-                color: Theme.of(context).colorScheme.primary,
-                compact: true,
-              ),
-              _ReportStatCard(
-                label: 'Transfers',
-                amount: report.totalTransfer,
-                color: theme.transferColor,
-                compact: true,
-              ),
-            ],
+          child: _ReportStatCard(
+            label: 'Net',
+            amount: report.totalIncome - report.totalExpense,
+            color: theme.netColor(report.totalIncome - report.totalExpense),
+            compact: true,
+            signed: true,
           ),
         ),
         const SizedBox(height: 24),
@@ -155,26 +175,6 @@ class _MoneyReportView extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         Text(
-          'Category Breakdown',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        GlassCard(
-          child: CategoryPieChart(data: report.categoryBreakdown),
-        ),
-        const SizedBox(height: 8),
-        ...report.categoryBreakdown.entries.map(
-          (e) => _BreakdownRow(
-            label: e.key,
-            amount: e.value,
-            total: report.totalExpense,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
           'Payment Mode Report',
           style: Theme.of(context)
               .textTheme
@@ -183,16 +183,27 @@ class _MoneyReportView extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         GlassCard(
-          child: Column(
-            children: report.paymentModeBreakdown.entries
-                .map(
-                  (e) => _BreakdownRow(
-                    label: e.key,
-                    amount: e.value,
-                    total: report.totalExpense + report.totalIncome,
-                  ),
-                )
-                .toList(),
+          child: Builder(
+            builder: (context) {
+              final entries = report.paymentModeBreakdown.entries.toList()
+                ..sort(
+                  (a, b) => (b.value.income - b.value.expense)
+                      .compareTo(a.value.income - a.value.expense),
+                );
+
+              return Column(
+                children: entries
+                    .map(
+                      (e) => _IncomeExpenseNetBreakdownRow(
+                        label: e.key,
+                        income: e.value.income,
+                        expense: e.value.expense,
+                        theme: theme,
+                      ),
+                    )
+                    .toList(),
+              );
+            },
           ),
         ),
         const SizedBox(height: 24),
@@ -205,16 +216,29 @@ class _MoneyReportView extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         GlassCard(
-          child: Column(
-            children: report.accountBreakdown.entries
-                .map(
-                  (e) => _BreakdownRow(
-                    label: e.key,
-                    amount: e.value,
-                    total: report.totalExpense + report.totalIncome,
-                  ),
-                )
-                .toList(),
+          child: Builder(
+            builder: (context) {
+              final entries = report.accountBreakdown.entries.toList()
+                ..sort(
+                  (a, b) => (b.value.income - b.value.expense)
+                      .compareTo(a.value.income - a.value.expense),
+                );
+
+              return Column(
+                children: entries
+                    .map(
+                      (e) => _IncomeExpenseNetBreakdownRow(
+                        label: e.key,
+                        income: e.value.income,
+                        expense: e.value.expense,
+                        theme: theme,
+                        onTap: () =>
+                            _openAccountTransactions(ref, context, e.key),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
           ),
         ),
         const SizedBox(height: 100),
@@ -271,8 +295,9 @@ class _GrainReportView extends StatelessWidget {
               _GrainStatCard(
                 label: 'Net',
                 grams: report.totalIn - report.totalOut,
-                color: Theme.of(context).colorScheme.primary,
+                color: theme.netColor(report.totalIn - report.totalOut),
                 compact: true,
+                signed: true,
               ),
             ],
           ),
@@ -670,12 +695,21 @@ class _ReportStatCard extends StatelessWidget {
     required this.amount,
     required this.color,
     this.compact = false,
+    this.signed = false,
   });
 
   final String label;
   final int amount;
   final Color color;
   final bool compact;
+  final bool signed;
+
+  String _formatAmount() {
+    if (signed) {
+      return AmountFormatter.formatSigned(amount.abs(), isExpense: amount < 0);
+    }
+    return AmountFormatter.format(amount);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -683,8 +717,8 @@ class _ReportStatCard extends StatelessWidget {
       return Column(
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(
-            AmountFormatter.format(amount),
+          ScaledAmountText(
+            _formatAmount(),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: color,
@@ -701,8 +735,9 @@ class _ReportStatCard extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 4),
-          Text(
-            AmountFormatter.format(amount),
+          ScaledAmountText(
+            _formatAmount(),
+            alignment: Alignment.centerLeft,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -721,12 +756,22 @@ class _GrainStatCard extends StatelessWidget {
     required this.grams,
     required this.color,
     this.compact = false,
+    this.signed = false,
   });
 
   final String label;
   final int grams;
   final Color color;
   final bool compact;
+  final bool signed;
+
+  String _formatGrams() {
+    if (signed) {
+      final prefix = grams < 0 ? '-' : grams > 0 ? '+' : '';
+      return '$prefix${WeightFormatter.format(grams.abs())}';
+    }
+    return WeightFormatter.format(grams);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -734,8 +779,8 @@ class _GrainStatCard extends StatelessWidget {
       return Column(
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(
-            WeightFormatter.format(grams),
+          ScaledAmountText(
+            _formatGrams(),
             style: TextStyle(fontWeight: FontWeight.w700, color: color),
           ),
         ],
@@ -749,8 +794,9 @@ class _GrainStatCard extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 4),
-          Text(
-            WeightFormatter.format(grams),
+          ScaledAmountText(
+            _formatGrams(),
+            alignment: Alignment.centerLeft,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -779,7 +825,7 @@ class _GrainBreakdownRow extends StatelessWidget {
     final fraction = total > 0 ? grams / total : 0.0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -787,8 +833,10 @@ class _GrainBreakdownRow extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label),
-              Text(
+              ScaledAmountText(
                 WeightFormatter.format(grams),
+                alignment: Alignment.centerRight,
+                maxWidthFraction: 0.4,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
@@ -807,46 +855,119 @@ class _GrainBreakdownRow extends StatelessWidget {
   }
 }
 
-class _BreakdownRow extends StatelessWidget {
-  const _BreakdownRow({
+class _IncomeExpenseNetBreakdownRow extends StatelessWidget {
+  const _IncomeExpenseNetBreakdownRow({
     required this.label,
-    required this.amount,
-    required this.total,
+    required this.income,
+    required this.expense,
+    required this.theme,
+    this.onTap,
   });
 
   final String label;
-  final int amount;
-  final int total;
+  final int income;
+  final int expense;
+  final AppThemeExtension theme;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final fraction = total > 0 ? amount / total : 0.0;
+    final net = income - expense;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label),
-              Text(
-                AmountFormatter.format(amount),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
             ],
           ),
           const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: fraction,
-              minHeight: 6,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _BreakdownStat(
+                  label: 'Income',
+                  amount: income,
+                  color: theme.incomeColor,
+                ),
+              ),
+              Expanded(
+                child: _BreakdownStat(
+                  label: 'Expense',
+                  amount: expense,
+                  color: theme.expenseColor,
+                ),
+              ),
+              Expanded(
+                child: _BreakdownStat(
+                  label: 'Net',
+                  amount: net,
+                  color: theme.netColor(net),
+                  signed: true,
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+
+    if (onTap == null) return content;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: content,
+      ),
+    );
+  }
+}
+
+class _BreakdownStat extends StatelessWidget {
+  const _BreakdownStat({
+    required this.label,
+    required this.amount,
+    required this.color,
+    this.signed = false,
+  });
+
+  final String label;
+  final int amount;
+  final Color color;
+  final bool signed;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = signed
+        ? AmountFormatter.formatSigned(amount.abs(), isExpense: amount < 0)
+        : AmountFormatter.format(amount);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 2),
+        ScaledAmountText(
+          text,
+          alignment: Alignment.centerLeft,
+          style: TextStyle(fontWeight: FontWeight.w600, color: color),
+        ),
+      ],
     );
   }
 }

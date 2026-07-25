@@ -121,6 +121,8 @@ class AppThemeExtension extends ThemeExtension<AppThemeExtension> {
   final Color glassColor;
   final String currencySymbol;
 
+  Color netColor(int net) => net < 0 ? expenseColor : incomeColor;
+
   @override
   AppThemeExtension copyWith({
     Color? incomeColor,

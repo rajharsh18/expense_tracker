@@ -13,7 +13,7 @@ class AppConstants {
   /// CashBook Room database schema version (PRAGMA user_version).
   static const int cashbookSchemaVersion = 3;
   static const String defaultCurrency = 'INR';
-  static const String defaultCurrencySymbol = '₹';
+  static const String defaultCurrencySymbol = 'Rs.';
   static const String defaultLocale = 'en_IN';
 
   static const List<String> requiredBackupFiles = [
@@ -35,7 +35,6 @@ class AppConstants {
   static const List<String> transactionTypes = [
     'income',
     'expense',
-    'transfer',
     'grain',
     'grain_in',
     'grain_out',
